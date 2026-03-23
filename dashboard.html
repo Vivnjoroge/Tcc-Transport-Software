@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TCC System - Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="dashboard-layout">
+    <aside class="sidebar">
+      <h2 class="sidebar-title">TCC System</h2>
+      <p id="sidebarRoleLabel" class="sidebar-subtitle">Dashboard</p>
+
+      <nav class="sidebar-nav">
+        <a href="#manageUsers" class="nav-item" data-nav-role="Manager">Manage Users</a>
+        <a href="#managerReports" class="nav-item" data-nav-role="Manager">Reports</a>
+        <a href="#truckStatus" class="nav-item" data-nav-role="Manager">Truck Status</a>
+        <a href="#consignmentTracking" class="nav-item" data-nav-role="Manager">Track Consignments</a>
+
+        <a href="#addConsignment" class="nav-item" data-nav-role="Clerk">Add Consignment</a>
+        <a href="#clerkConsignments" class="nav-item" data-nav-role="Clerk">View Consignments</a>
+
+        <a href="#driverDeliveries" class="nav-item" data-nav-role="Driver">Assigned Deliveries</a>
+      </nav>
+
+      <button id="logoutBtn" class="btn-outline sidebar-logout">Logout</button>
+    </aside>
+
+    <main class="dashboard-main">
+      <header class="dashboard-header">
+        <div>
+          <h1>TCC System</h1>
+          <p id="welcomeText" class="header-subtitle"></p>
+        </div>
+      </header>
+
+      <section id="roleNotice" class="card role-notice"></section>
+
+      <section id="managerSection" class="dashboard-section">
+        <div id="manageUsers" class="card">
+          <h3>Manage Users</h3>
+
+          <div id="manageUserMessage" class="message" role="alert" aria-live="polite"></div>
+
+          <form id="manageUserForm" novalidate>
+            <input type="hidden" id="managedUserId" />
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="managedFullName">Full Name</label>
+                <input
+                  type="text"
+                  id="managedFullName"
+                  name="managedFullName"
+                  placeholder="Enter full name"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="managedEmail">Email</label>
+                <input
+                  type="email"
+                  id="managedEmail"
+                  name="managedEmail"
+                  placeholder="Enter email"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="managedPassword">Password</label>
+                <input
+                  type="password"
+                  id="managedPassword"
+                  name="managedPassword"
+                  placeholder="Enter password"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="managedRole">Role</label>
+                <select id="managedRole" name="managedRole">
+                  <option value="">Select role</option>
+                  <option value="Clerk">Clerk</option>
+                  <option value="Driver">Driver</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="action-row">
+              <button id="addUserBtn" type="submit" class="btn-primary action-btn">Add User</button>
+              <button id="cancelEditUserBtn" type="button" class="btn-light action-btn" hidden>Cancel Edit</button>
+            </div>
+          </form>
+
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="managedUsersBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="managerReports" class="card">
+          <h3>Reports</h3>
+          <div class="stats-grid">
+            <article class="stat-card">
+              <span class="stat-label">Total Revenue</span>
+              <strong id="totalRevenue">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Total Consignments</span>
+              <strong id="totalConsignments">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Destinations</span>
+              <strong id="totalDestinations">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Pending</span>
+              <strong id="totalPending">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Ready for Dispatch</span>
+              <strong id="totalReady">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Delivered</span>
+              <strong id="totalDelivered">0</strong>
+            </article>
+          </div>
+        </div>
+
+        <div id="truckStatus" class="card">
+          <h3>Truck Status</h3>
+          <p id="truckStatusSummary" class="muted-text"></p>
+
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Destination</th>
+                  <th>Total Volume</th>
+                  <th>Status</th>
+                  <th>Assigned Driver</th>
+                </tr>
+              </thead>
+              <tbody id="truckStatusBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="consignmentTracking" class="card">
+          <h3>Consignment Tracking</h3>
+
+          <div class="filter-row">
+            <div class="filter-group">
+              <label for="managerTrackSearch">Search (ID / destination / receiver)</label>
+              <input type="text" id="managerTrackSearch" placeholder="Type to search consignments" />
+            </div>
+
+            <div class="filter-group">
+              <label for="managerTrackStatus">Filter by status</label>
+              <select id="managerTrackStatus">
+                <option value="">All statuses</option>
+                <option value="Pending">Pending</option>
+                <option value="Ready for Dispatch">Ready for Dispatch</option>
+                <option value="Delivered">Delivered</option>
+              </select>
+            </div>
+
+            <div class="action-row tracking-actions">
+              <button id="managerTrackApply" type="button" class="btn-light action-btn">Apply</button>
+              <button id="managerTrackReset" type="button" class="btn-light action-btn">Reset</button>
+            </div>
+          </div>
+
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Consignment ID</th>
+                  <th>Destination</th>
+                  <th>Receiver</th>
+                  <th>Volume</th>
+                  <th>Status</th>
+                  <th>Driver</th>
+                </tr>
+              </thead>
+              <tbody id="consignmentTrackingBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="clerkSection" class="dashboard-section hidden">
+        <div id="addConsignment" class="card">
+          <h3>Add Consignment</h3>
+
+          <div id="clerkMessage" class="message" role="alert" aria-live="polite"></div>
+
+          <form id="clerkConsignmentForm" novalidate>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="senderName">Sender Name</label>
+                <input type="text" id="senderName" name="senderName" placeholder="Enter sender name" />
+              </div>
+
+              <div class="form-group">
+                <label for="senderAddress">Sender Address</label>
+                <input
+                  type="text"
+                  id="senderAddress"
+                  name="senderAddress"
+                  placeholder="Enter sender address"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="receiverName">Receiver Name</label>
+                <input type="text" id="receiverName" name="receiverName" placeholder="Enter receiver name" />
+              </div>
+
+              <div class="form-group">
+                <label for="receiverAddress">Receiver Address</label>
+                <input
+                  type="text"
+                  id="receiverAddress"
+                  name="receiverAddress"
+                  placeholder="Enter receiver address"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="destination">Destination</label>
+                <input type="text" id="destination" name="destination" placeholder="Enter destination" />
+              </div>
+
+              <div class="form-group">
+                <label for="volume">Volume (m³)</label>
+                <input
+                  type="number"
+                  id="volume"
+                  name="volume"
+                  min="0.01"
+                  step="0.01"
+                  placeholder="Enter volume"
+                />
+              </div>
+            </div>
+
+            <button type="submit" class="btn-primary action-btn">Save Consignment</button>
+          </form>
+
+          <p id="clerkBillingResult" class="muted-text"></p>
+        </div>
+
+        <div id="clerkConsignments" class="card">
+          <h3>Consignments</h3>
+          <p id="clerkDispatchSummary" class="muted-text"></p>
+
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Sender</th>
+                  <th>Receiver</th>
+                  <th>Destination</th>
+                  <th>Volume</th>
+                  <th>Cost</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="clerkConsignmentsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="driverSection" class="dashboard-section hidden">
+        <div id="driverDeliveries" class="card">
+          <h3>Assigned Deliveries</h3>
+
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Consignment ID</th>
+                  <th>Sender</th>
+                  <th>Receiver</th>
+                  <th>Destination</th>
+                  <th>Volume</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="driverAssignmentsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
