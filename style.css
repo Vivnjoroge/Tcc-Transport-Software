@@ -69,6 +69,17 @@ body {
 	box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
+.input-invalid {
+	border-color: #ef4444 !important;
+	box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12) !important;
+}
+
+.field-error {
+	margin: 6px 0 0;
+	font-size: 0.82rem;
+	color: #b91c1c;
+}
+
 .btn-primary {
 	width: 100%;
 	border: none;
@@ -272,6 +283,10 @@ body {
 	gap: 12px;
 }
 
+.compact-stats {
+	margin-bottom: 14px;
+}
+
 .form-grid {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -318,6 +333,11 @@ body {
 .tracking-actions {
 	margin: 0;
 	align-self: end;
+}
+
+.report-actions {
+	margin-top: 14px;
+	margin-bottom: 0;
 }
 
 .action-row {

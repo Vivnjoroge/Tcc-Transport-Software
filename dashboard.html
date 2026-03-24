@@ -13,13 +13,13 @@
       <p id="sidebarRoleLabel" class="sidebar-subtitle">Dashboard</p>
 
       <nav class="sidebar-nav">
-        <a href="#manageUsers" class="nav-item" data-nav-role="Manager">Manage Users</a>
-        <a href="#managerReports" class="nav-item" data-nav-role="Manager">Reports</a>
-        <a href="#truckStatus" class="nav-item" data-nav-role="Manager">Truck Status</a>
-        <a href="#consignmentTracking" class="nav-item" data-nav-role="Manager">Track Consignments</a>
+        <a href="#manageUsers" class="nav-item" data-nav-role="Manager" data-manager-nav="manage-users">Manage Users</a>
+        <a href="#managerReports" class="nav-item" data-nav-role="Manager" data-manager-nav="reports">Reports</a>
+        <a href="#truckStatus" class="nav-item" data-nav-role="Manager" data-manager-nav="truck-status">Truck Status</a>
+        <a href="#consignmentTracking" class="nav-item" data-nav-role="Manager" data-manager-nav="consignments">Track Consignments</a>
 
-        <a href="#addConsignment" class="nav-item" data-nav-role="Clerk">Add Consignment</a>
-        <a href="#clerkConsignments" class="nav-item" data-nav-role="Clerk">View Consignments</a>
+        <a href="#addConsignment" class="nav-item" data-nav-role="Clerk" data-clerk-nav="add-consignment">Add Consignment</a>
+        <a href="#clerkConsignments" class="nav-item" data-nav-role="Clerk" data-clerk-nav="view-consignments">View Consignments</a>
 
         <a href="#driverDeliveries" class="nav-item" data-nav-role="Driver">Assigned Deliveries</a>
       </nav>
@@ -38,7 +38,7 @@
       <section id="roleNotice" class="card role-notice"></section>
 
       <section id="managerSection" class="dashboard-section">
-        <div id="manageUsers" class="card">
+        <div id="manageUsers" class="card manager-panel" data-manager-view="manage-users">
           <h3>Manage Users</h3>
 
           <div id="manageUserMessage" class="message" role="alert" aria-live="polite"></div>
@@ -108,7 +108,7 @@
           </div>
         </div>
 
-        <div id="managerReports" class="card">
+        <div id="managerReports" class="card manager-panel" data-manager-view="reports">
           <h3>Reports</h3>
           <div class="stats-grid">
             <article class="stat-card">
@@ -136,9 +136,14 @@
               <strong id="totalDelivered">0</strong>
             </article>
           </div>
+
+          <div class="action-row report-actions">
+            <button id="managerExportCsv" type="button" class="btn-light action-btn">Export CSV</button>
+            <button id="managerExportPdf" type="button" class="btn-light action-btn">Export PDF</button>
+          </div>
         </div>
 
-        <div id="truckStatus" class="card">
+        <div id="truckStatus" class="card manager-panel" data-manager-view="truck-status">
           <h3>Truck Status</h3>
           <p id="truckStatusSummary" class="muted-text"></p>
 
@@ -157,7 +162,7 @@
           </div>
         </div>
 
-        <div id="consignmentTracking" class="card">
+        <div id="consignmentTracking" class="card manager-panel" data-manager-view="consignments">
           <h3>Consignment Tracking</h3>
 
           <div class="filter-row">
@@ -201,7 +206,7 @@
       </section>
 
       <section id="clerkSection" class="dashboard-section hidden">
-        <div id="addConsignment" class="card">
+        <div id="addConsignment" class="card clerk-panel" data-clerk-view="add-consignment">
           <h3>Add Consignment</h3>
 
           <div id="clerkMessage" class="message" role="alert" aria-live="polite"></div>
@@ -254,6 +259,14 @@
                   placeholder="Enter volume"
                 />
               </div>
+
+              <div class="form-group">
+                <label for="assignedDriverId">Assign Driver</label>
+                <select id="assignedDriverId" name="assignedDriverId">
+                  <option value="">Select driver</option>
+                </select>
+                <p id="clerkDriverHint" class="muted-text"></p>
+              </div>
             </div>
 
             <button type="submit" class="btn-primary action-btn">Save Consignment</button>
@@ -262,9 +275,46 @@
           <p id="clerkBillingResult" class="muted-text"></p>
         </div>
 
-        <div id="clerkConsignments" class="card">
+        <div id="clerkConsignments" class="card clerk-panel" data-clerk-view="view-consignments">
           <h3>Consignments</h3>
           <p id="clerkDispatchSummary" class="muted-text"></p>
+
+          <div class="stats-grid compact-stats">
+            <article class="stat-card">
+              <span class="stat-label">Total</span>
+              <strong id="clerkTotalConsignments">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Ready for Dispatch</span>
+              <strong id="clerkReadyConsignments">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Delivered</span>
+              <strong id="clerkDeliveredConsignments">0</strong>
+            </article>
+          </div>
+
+          <div class="filter-row">
+            <div class="filter-group">
+              <label for="clerkConsignmentSearch">Search (ID / sender / receiver / destination)</label>
+              <input type="text" id="clerkConsignmentSearch" placeholder="Type to search consignments" />
+            </div>
+
+            <div class="filter-group">
+              <label for="clerkConsignmentStatus">Filter by status</label>
+              <select id="clerkConsignmentStatus">
+                <option value="">All statuses</option>
+                <option value="Pending">Pending</option>
+                <option value="Ready for Dispatch">Ready for Dispatch</option>
+                <option value="Delivered">Delivered</option>
+              </select>
+            </div>
+
+            <div class="action-row tracking-actions">
+              <button id="clerkApplyFilters" type="button" class="btn-light action-btn">Apply</button>
+              <button id="clerkResetFilters" type="button" class="btn-light action-btn">Reset</button>
+            </div>
+          </div>
 
           <div class="table-wrapper">
             <table>
@@ -277,6 +327,7 @@
                   <th>Volume</th>
                   <th>Cost</th>
                   <th>Status</th>
+                  <th>Driver</th>
                 </tr>
               </thead>
               <tbody id="clerkConsignmentsBody"></tbody>

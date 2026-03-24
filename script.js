@@ -44,12 +44,33 @@ function initLoginPage() {
 
 	loginForm.addEventListener('submit', (event) => {
 		event.preventDefault();
+		clearInlineErrors(loginForm);
 
 		const email = document.getElementById('loginEmail').value.trim().toLowerCase();
 		const password = document.getElementById('loginPassword').value;
 
 		if (!email || !password) {
+			if (!email) {
+				setInlineError(document.getElementById('loginEmail'), 'Email is required.');
+			}
+
+			if (!password) {
+				setInlineError(document.getElementById('loginPassword'), 'Password is required.');
+			}
+
 			showMessage(messageBox, 'Please enter email and password.', 'error');
+			return;
+		}
+
+		if (!isValidEmail(email)) {
+			setInlineError(document.getElementById('loginEmail'), 'Enter a valid email address.');
+			showMessage(messageBox, 'Please enter a valid email address.', 'error');
+			return;
+		}
+
+		if (password.length < 6) {
+			setInlineError(document.getElementById('loginPassword'), 'Password must be at least 6 characters.');
+			showMessage(messageBox, 'Password must be at least 6 characters.', 'error');
 			return;
 		}
 
@@ -115,9 +136,11 @@ function initDashboardPage() {
 	applyRoleVisibility(currentUser.role);
 
 	if (currentUser.role === 'Manager') {
-		setRoleNotice(roleNotice, 'Manager dashboard active: users, reports, truck status, and consignment tracking.', 'success');
+		setRoleNotice(roleNotice, 'Manager dashboard active: manage users, reports, truck status, and consignment tracking.', 'success');
 		initManagerUserManagement();
 		initManagerTrackingControls();
+		initManagerReportExports();
+		initManagerSectionNavigation();
 		renderManagerDashboard();
 		return;
 	}
@@ -125,6 +148,7 @@ function initDashboardPage() {
 	if (currentUser.role === 'Clerk') {
 		setRoleNotice(roleNotice, 'Clerk dashboard active: add consignments, billing, and view consignments.', 'info');
 		initClerkDashboard(currentUser);
+		initClerkSectionNavigation();
 		renderClerkConsignmentsTable();
 		return;
 	}
@@ -136,6 +160,92 @@ function initDashboardPage() {
 	}
 
 	setRoleNotice(roleNotice, 'Unknown role. Please contact the Manager.', 'warning');
+}
+
+// Initialize Clerk sidebar navigation so add/view consignments are displayed one at a time.
+function initClerkSectionNavigation() {
+	const clerkNavItems = Array.from(document.querySelectorAll('.nav-item[data-nav-role="Clerk"][data-clerk-nav]'));
+	const clerkPanels = Array.from(document.querySelectorAll('#clerkSection .clerk-panel[data-clerk-view]'));
+
+	if (clerkNavItems.length === 0 || clerkPanels.length === 0) {
+		return;
+	}
+
+	const showClerkView = (viewName) => {
+		clerkPanels.forEach((panel) => {
+			const panelView = panel.dataset.clerkView;
+			panel.classList.toggle('hidden', panelView !== viewName);
+		});
+
+		clerkNavItems.forEach((item) => {
+			item.classList.toggle('active', item.dataset.clerkNav === viewName);
+		});
+	};
+
+	clerkNavItems.forEach((item) => {
+		item.addEventListener('click', (event) => {
+			event.preventDefault();
+			const viewName = item.dataset.clerkNav;
+			if (!viewName) {
+				return;
+			}
+
+			showClerkView(viewName);
+			window.location.hash = item.getAttribute('href') || '';
+		});
+	});
+
+	const hashToView = {
+		'#addConsignment': 'add-consignment',
+		'#clerkConsignments': 'view-consignments'
+	};
+
+	const initialView = hashToView[window.location.hash] || 'add-consignment';
+	showClerkView(initialView);
+}
+
+// Initialize Manager sidebar navigation so each manager feature is shown on its own view.
+function initManagerSectionNavigation() {
+	const managerNavItems = Array.from(document.querySelectorAll('.nav-item[data-nav-role="Manager"][data-manager-nav]'));
+	const managerPanels = Array.from(document.querySelectorAll('#managerSection .manager-panel[data-manager-view]'));
+
+	if (managerNavItems.length === 0 || managerPanels.length === 0) {
+		return;
+	}
+
+	const showManagerView = (viewName) => {
+		managerPanels.forEach((panel) => {
+			const panelView = panel.dataset.managerView;
+			panel.classList.toggle('hidden', panelView !== viewName);
+		});
+
+		managerNavItems.forEach((item) => {
+			item.classList.toggle('active', item.dataset.managerNav === viewName);
+		});
+	};
+
+	managerNavItems.forEach((item) => {
+		item.addEventListener('click', (event) => {
+			event.preventDefault();
+			const viewName = item.dataset.managerNav;
+			if (!viewName) {
+				return;
+			}
+
+			showManagerView(viewName);
+			window.location.hash = item.getAttribute('href') || '';
+		});
+	});
+
+	const hashToView = {
+		'#manageUsers': 'manage-users',
+		'#managerReports': 'reports',
+		'#truckStatus': 'truck-status',
+		'#consignmentTracking': 'consignments'
+	};
+
+	const initialView = hashToView[window.location.hash] || 'manage-users';
+	showManagerView(initialView);
 }
 
 // Show only the section and menu items for the logged-in role.
@@ -200,6 +310,242 @@ function initManagerTrackingControls() {
 	});
 }
 
+// Initialize Manager reports export actions.
+function initManagerReportExports() {
+	const exportCsvBtn = document.getElementById('managerExportCsv');
+	const exportPdfBtn = document.getElementById('managerExportPdf');
+
+	if (exportCsvBtn) {
+		exportCsvBtn.addEventListener('click', () => {
+			exportManagerReportCsv();
+		});
+	}
+
+	if (exportPdfBtn) {
+		exportPdfBtn.addEventListener('click', () => {
+			exportManagerReportPdf();
+		});
+	}
+}
+
+// Get manager tracking filters from UI.
+function getManagerTrackingFilters() {
+	const searchInput = document.getElementById('managerTrackSearch');
+	const statusSelect = document.getElementById('managerTrackStatus');
+
+	return {
+		searchTerm: searchInput ? searchInput.value.trim().toLowerCase() : '',
+		selectedStatus: statusSelect ? statusSelect.value : ''
+	};
+}
+
+// Filter consignments using current manager tracking controls.
+function getFilteredManagerConsignments(consignments) {
+	const { searchTerm, selectedStatus } = getManagerTrackingFilters();
+
+	return consignments.filter((consignment) => {
+		const statusMatch = !selectedStatus || consignment.status === selectedStatus;
+		if (!statusMatch) {
+			return false;
+		}
+
+		if (!searchTerm) {
+			return true;
+		}
+
+		const searchableText = [
+			consignment.id,
+			consignment.destination,
+			consignment.receiverName,
+			consignment.senderName,
+			consignment.assignedDriverName
+		]
+			.filter(Boolean)
+			.join(' ')
+			.toLowerCase();
+
+		return searchableText.includes(searchTerm);
+	});
+}
+
+// Build destination-based status rows for manager tables and exports.
+function getDestinationStatusRows(consignments) {
+	const destinationMap = new Map();
+
+	consignments.forEach((consignment) => {
+		const destination = consignment.destination || 'Unknown';
+		const volume = Number(consignment.volume) || 0;
+
+		if (!destinationMap.has(destination)) {
+			destinationMap.set(destination, {
+				totalVolume: 0,
+				assignedDriverName: null
+			});
+		}
+
+		const entry = destinationMap.get(destination);
+		entry.totalVolume += volume;
+		if (consignment.status === 'Ready for Dispatch') {
+			entry.assignedDriverName = consignment.assignedDriverName || entry.assignedDriverName;
+		}
+	});
+
+	return Array.from(destinationMap.entries()).map(([destination, details]) => ({
+		destination,
+		totalVolume: details.totalVolume,
+		isReady: details.totalVolume >= 500,
+		assignedDriverName: details.assignedDriverName || '-'
+	}));
+}
+
+// Export manager dashboard data as CSV.
+function exportManagerReportCsv() {
+	const consignments = getConsignments();
+	const destinationRows = getDestinationStatusRows(consignments);
+	const filteredConsignments = getFilteredManagerConsignments(consignments);
+
+	const totalRevenue = consignments.reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
+	const pendingCount = consignments.filter((item) => (item.status || 'Pending') === 'Pending').length;
+	const readyCount = consignments.filter((item) => item.status === 'Ready for Dispatch').length;
+	const deliveredCount = consignments.filter((item) => item.status === 'Delivered').length;
+
+	const lines = [
+		'"TCC Manager Report"',
+		`"Generated At","${new Date().toLocaleString()}"`,
+		'',
+		'"Summary"',
+		'"Metric","Value"',
+		`"Total Revenue","${formatCurrency(totalRevenue)}"`,
+		`"Total Consignments","${consignments.length}"`,
+		`"Destinations","${destinationRows.length}"`,
+		`"Pending","${pendingCount}"`,
+		`"Ready for Dispatch","${readyCount}"`,
+		`"Delivered","${deliveredCount}"`,
+		'',
+		'"Truck Status by Destination"',
+		'"Destination","Total Volume","Status","Assigned Driver"'
+	];
+
+	destinationRows.forEach((row) => {
+		lines.push(`"${escapeCsv(row.destination)}","${row.totalVolume.toFixed(2)} m³","${row.isReady ? 'Ready for Dispatch' : 'Pending'}","${escapeCsv(row.assignedDriverName)}"`);
+	});
+
+	lines.push('', '"Tracked Consignments (Current Filters)"', '"ID","Destination","Receiver","Volume","Status","Driver"');
+
+	filteredConsignments.forEach((consignment) => {
+		lines.push(`"${escapeCsv(consignment.id)}","${escapeCsv(consignment.destination || '-')}","${escapeCsv(consignment.receiverName || '-')}","${Number(consignment.volume || 0).toFixed(2)} m³","${escapeCsv(consignment.status || 'Pending')}","${escapeCsv(consignment.assignedDriverName || '-')}"`);
+	});
+
+	const csvBlob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+	const downloadUrl = URL.createObjectURL(csvBlob);
+	const link = document.createElement('a');
+	link.href = downloadUrl;
+	link.download = `tcc-manager-report-${new Date().toISOString().slice(0, 10)}.csv`;
+	document.body.appendChild(link);
+	link.click();
+	document.body.removeChild(link);
+	URL.revokeObjectURL(downloadUrl);
+}
+
+// Export manager dashboard as printable PDF document.
+function exportManagerReportPdf() {
+	const consignments = getConsignments();
+	const destinationRows = getDestinationStatusRows(consignments);
+	const filteredConsignments = getFilteredManagerConsignments(consignments);
+
+	const totalRevenue = consignments.reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
+	const pendingCount = consignments.filter((item) => (item.status || 'Pending') === 'Pending').length;
+	const readyCount = consignments.filter((item) => item.status === 'Ready for Dispatch').length;
+	const deliveredCount = consignments.filter((item) => item.status === 'Delivered').length;
+
+	const summaryRows = `
+		<tr><td>Total Revenue</td><td>${escapeHtml(formatCurrency(totalRevenue))}</td></tr>
+		<tr><td>Total Consignments</td><td>${consignments.length}</td></tr>
+		<tr><td>Destinations</td><td>${destinationRows.length}</td></tr>
+		<tr><td>Pending</td><td>${pendingCount}</td></tr>
+		<tr><td>Ready for Dispatch</td><td>${readyCount}</td></tr>
+		<tr><td>Delivered</td><td>${deliveredCount}</td></tr>
+	`;
+
+	const truckRows = destinationRows.length
+		? destinationRows
+			.map((row) => `
+				<tr>
+					<td>${escapeHtml(row.destination)}</td>
+					<td>${row.totalVolume.toFixed(2)} m³</td>
+					<td>${row.isReady ? 'Ready for Dispatch' : 'Pending'}</td>
+					<td>${escapeHtml(row.assignedDriverName)}</td>
+				</tr>
+			`)
+			.join('')
+		: '<tr><td colspan="4">No truck status data available.</td></tr>';
+
+	const trackedRows = filteredConsignments.length
+		? filteredConsignments
+			.map((consignment) => `
+				<tr>
+					<td>${escapeHtml(consignment.id)}</td>
+					<td>${escapeHtml(consignment.destination || '-')}</td>
+					<td>${escapeHtml(consignment.receiverName || '-')}</td>
+					<td>${Number(consignment.volume || 0).toFixed(2)} m³</td>
+					<td>${escapeHtml(consignment.status || 'Pending')}</td>
+					<td>${escapeHtml(consignment.assignedDriverName || '-')}</td>
+				</tr>
+			`)
+			.join('')
+		: '<tr><td colspan="6">No consignments matched current filters.</td></tr>';
+
+	const reportWindow = window.open('', '_blank', 'width=1000,height=700');
+	if (!reportWindow) {
+		return;
+	}
+
+	reportWindow.document.write(`
+		<!DOCTYPE html>
+		<html lang="en">
+		<head>
+			<meta charset="UTF-8" />
+			<title>TCC Manager Report</title>
+			<style>
+				body { font-family: Arial, Helvetica, sans-serif; margin: 24px; color: #111827; }
+				h1 { margin: 0 0 6px; }
+				p { margin: 0 0 16px; color: #4b5563; font-size: 14px; }
+				h2 { margin: 22px 0 8px; font-size: 18px; }
+				table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+				th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; font-size: 13px; }
+				th { background: #f9fafb; }
+			</style>
+		</head>
+		<body>
+			<h1>TCC Manager Report</h1>
+			<p>Generated on ${escapeHtml(new Date().toLocaleString())}</p>
+
+			<h2>Summary</h2>
+			<table>
+				<thead><tr><th>Metric</th><th>Value</th></tr></thead>
+				<tbody>${summaryRows}</tbody>
+			</table>
+
+			<h2>Truck Status by Destination</h2>
+			<table>
+				<thead><tr><th>Destination</th><th>Total Volume</th><th>Status</th><th>Assigned Driver</th></tr></thead>
+				<tbody>${truckRows}</tbody>
+			</table>
+
+			<h2>Tracked Consignments (Current Filters)</h2>
+			<table>
+				<thead><tr><th>ID</th><th>Destination</th><th>Receiver</th><th>Volume</th><th>Status</th><th>Driver</th></tr></thead>
+				<tbody>${trackedRows}</tbody>
+			</table>
+		</body>
+		</html>
+	`);
+
+	reportWindow.document.close();
+	reportWindow.focus();
+	reportWindow.print();
+}
+
 // Initialize Manager-only user management features.
 function initManagerUserManagement() {
 	const manageUserForm = document.getElementById('manageUserForm');
@@ -222,6 +568,7 @@ function initManagerUserManagement() {
 
 	manageUserForm.addEventListener('submit', (event) => {
 		event.preventDefault();
+		clearInlineErrors(manageUserForm);
 
 		const fullName = fullNameInput.value.trim();
 		const email = emailInput.value.trim().toLowerCase();
@@ -230,11 +577,46 @@ function initManagerUserManagement() {
 		const editingId = Number(managedUserId.value || 0);
 
 		if (!fullName || !email || !password || !role) {
+			if (!fullName) {
+				setInlineError(fullNameInput, 'Full name is required.');
+			}
+
+			if (!email) {
+				setInlineError(emailInput, 'Email is required.');
+			}
+
+			if (!password) {
+				setInlineError(passwordInput, 'Password is required.');
+			}
+
+			if (!role) {
+				setInlineError(roleInput, 'Role is required.');
+			}
+
 			showMessage(messageBox, 'Please fill in all fields.', 'error');
 			return;
 		}
 
+		if (!isValidName(fullName)) {
+			setInlineError(fullNameInput, 'Enter at least 2 letters for name.');
+			showMessage(messageBox, 'Please enter a valid full name (at least 2 letters).', 'error');
+			return;
+		}
+
+		if (!isValidEmail(email)) {
+			setInlineError(emailInput, 'Enter a valid email address.');
+			showMessage(messageBox, 'Please enter a valid email address.', 'error');
+			return;
+		}
+
+		if (password.length < 6) {
+			setInlineError(passwordInput, 'Password must be at least 6 characters.');
+			showMessage(messageBox, 'Password must be at least 6 characters.', 'error');
+			return;
+		}
+
 		if (!MANAGED_ROLES.includes(role)) {
+			setInlineError(roleInput, 'Role must be Clerk or Driver.');
 			showMessage(messageBox, 'Role must be Clerk or Driver.', 'error');
 			return;
 		}
@@ -242,6 +624,7 @@ function initManagerUserManagement() {
 		const users = getUsers();
 		const duplicateUser = users.find((user) => user.email === email && user.id !== editingId);
 		if (duplicateUser) {
+			setInlineError(emailInput, 'This email is already in use.');
 			showMessage(messageBox, 'This email is already used by another account.', 'error');
 			return;
 		}
@@ -273,6 +656,7 @@ function initManagerUserManagement() {
 
 		saveUsers(users);
 		manageUserForm.reset();
+		clearInlineErrors(manageUserForm);
 		managedUserId.value = '';
 		addUserBtn.textContent = 'Add User';
 		cancelEditBtn.hidden = true;
@@ -328,6 +712,7 @@ function initManagerUserManagement() {
 
 	cancelEditBtn.addEventListener('click', () => {
 		manageUserForm.reset();
+		clearInlineErrors(manageUserForm);
 		managedUserId.value = '';
 		addUserBtn.textContent = 'Add User';
 		cancelEditBtn.hidden = true;
@@ -398,9 +783,54 @@ function initClerkDashboard(currentUser) {
 
 	const messageBox = document.getElementById('clerkMessage');
 	const billingResult = document.getElementById('clerkBillingResult');
+	const applyFiltersBtn = document.getElementById('clerkApplyFilters');
+	const resetFiltersBtn = document.getElementById('clerkResetFilters');
+	const searchInput = document.getElementById('clerkConsignmentSearch');
+	const statusSelect = document.getElementById('clerkConsignmentStatus');
+	const assignedDriverSelect = document.getElementById('assignedDriverId');
+	const saveButton = form.querySelector('button[type="submit"]');
+
+	populateClerkDriverSelect();
+	updateClerkDriverAvailabilityState(assignedDriverSelect, saveButton);
+
+	if (applyFiltersBtn) {
+		applyFiltersBtn.addEventListener('click', () => {
+			renderClerkConsignmentsTable();
+		});
+	}
+
+	if (resetFiltersBtn) {
+		resetFiltersBtn.addEventListener('click', () => {
+			if (searchInput) {
+				searchInput.value = '';
+			}
+
+			if (statusSelect) {
+				statusSelect.value = '';
+			}
+
+			renderClerkConsignmentsTable();
+		});
+	}
+
+	if (statusSelect) {
+		statusSelect.addEventListener('change', () => {
+			renderClerkConsignmentsTable();
+		});
+	}
+
+	if (searchInput) {
+		searchInput.addEventListener('keydown', (event) => {
+			if (event.key === 'Enter') {
+				event.preventDefault();
+				renderClerkConsignmentsTable();
+			}
+		});
+	}
 
 	form.addEventListener('submit', (event) => {
 		event.preventDefault();
+		clearInlineErrors(form);
 
 		const senderName = document.getElementById('senderName').value.trim();
 		const senderAddress = document.getElementById('senderAddress').value.trim();
@@ -408,14 +838,89 @@ function initClerkDashboard(currentUser) {
 		const receiverAddress = document.getElementById('receiverAddress').value.trim();
 		const destination = document.getElementById('destination').value.trim();
 		const volume = Number(document.getElementById('volume').value);
+		const selectedDriverId = assignedDriverSelect ? Number(assignedDriverSelect.value) : 0;
+		const selectedDriver = getUsers().find((user) => user.role === 'Driver' && Number(user.id) === selectedDriverId);
 
-		if (!senderName || !senderAddress || !receiverName || !receiverAddress || !destination || !volume) {
+		if (!senderName || !senderAddress || !receiverName || !receiverAddress || !destination || !volume || !selectedDriverId) {
+			if (!senderName) {
+				setInlineError(document.getElementById('senderName'), 'Sender name is required.');
+			}
+
+			if (!senderAddress) {
+				setInlineError(document.getElementById('senderAddress'), 'Sender address is required.');
+			}
+
+			if (!receiverName) {
+				setInlineError(document.getElementById('receiverName'), 'Receiver name is required.');
+			}
+
+			if (!receiverAddress) {
+				setInlineError(document.getElementById('receiverAddress'), 'Receiver address is required.');
+			}
+
+			if (!destination) {
+				setInlineError(document.getElementById('destination'), 'Destination is required.');
+			}
+
+			if (!volume) {
+				setInlineError(document.getElementById('volume'), 'Volume is required.');
+			}
+
+			if (!selectedDriverId && assignedDriverSelect) {
+				setInlineError(assignedDriverSelect, 'Driver assignment is required.');
+			}
+
 			showMessage(messageBox, 'Please fill in all fields.', 'error');
 			return;
 		}
 
+		if (!isValidName(senderName)) {
+			setInlineError(document.getElementById('senderName'), 'Enter at least 2 letters for sender name.');
+			showMessage(messageBox, 'Please enter a valid sender name (at least 2 letters).', 'error');
+			return;
+		}
+
+		if (!isValidName(receiverName)) {
+			setInlineError(document.getElementById('receiverName'), 'Enter at least 2 letters for receiver name.');
+			showMessage(messageBox, 'Please enter a valid receiver name (at least 2 letters).', 'error');
+			return;
+		}
+
+		if (!isValidAddress(senderAddress)) {
+			setInlineError(document.getElementById('senderAddress'), 'Address must be at least 5 characters.');
+			showMessage(messageBox, 'Sender address must be at least 5 characters.', 'error');
+			return;
+		}
+
+		if (!isValidAddress(receiverAddress)) {
+			setInlineError(document.getElementById('receiverAddress'), 'Address must be at least 5 characters.');
+			showMessage(messageBox, 'Receiver address must be at least 5 characters.', 'error');
+			return;
+		}
+
+		if (!isValidDestination(destination)) {
+			setInlineError(document.getElementById('destination'), 'Destination must be at least 2 characters.');
+			showMessage(messageBox, 'Destination must be at least 2 characters.', 'error');
+			return;
+		}
+
+		if (!selectedDriver) {
+			if (assignedDriverSelect) {
+				setInlineError(assignedDriverSelect, 'Please select a valid driver.');
+			}
+			showMessage(messageBox, 'Please select a valid driver.', 'error');
+			return;
+		}
+
 		if (volume <= 0) {
+			setInlineError(document.getElementById('volume'), 'Volume must be greater than 0.');
 			showMessage(messageBox, 'Volume must be greater than 0.', 'error');
+			return;
+		}
+
+		if (volume > 100000) {
+			setInlineError(document.getElementById('volume'), 'Please enter a realistic volume value.');
+			showMessage(messageBox, 'Volume is too large. Please enter a realistic value.', 'error');
 			return;
 		}
 
@@ -433,8 +938,8 @@ function initClerkDashboard(currentUser) {
 			volume,
 			cost,
 			status: 'Pending',
-			assignedDriverId: null,
-			assignedDriverName: null,
+			assignedDriverId: selectedDriver.id,
+			assignedDriverName: selectedDriver.fullName,
 			createdByUserId: currentUser.id,
 			createdAt: new Date().toISOString()
 		});
@@ -448,7 +953,84 @@ function initClerkDashboard(currentUser) {
 		}
 
 		form.reset();
+		clearInlineErrors(form);
+		populateClerkDriverSelect();
+		updateClerkDriverAvailabilityState(assignedDriverSelect, saveButton);
 		renderClerkConsignmentsTable();
+	});
+}
+
+// Populate Clerk driver dropdown with available Driver accounts.
+function populateClerkDriverSelect() {
+	const assignedDriverSelect = document.getElementById('assignedDriverId');
+	if (!assignedDriverSelect) {
+		return;
+	}
+
+	const drivers = getUsers().filter((user) => user.role === 'Driver');
+	assignedDriverSelect.innerHTML = '<option value="">Select driver</option>';
+
+	drivers.forEach((driver) => {
+		const option = document.createElement('option');
+		option.value = String(driver.id);
+		option.textContent = `${driver.fullName} (${driver.email})`;
+		assignedDriverSelect.appendChild(option);
+	});
+}
+
+// Enable/disable clerk save action and show warning when no drivers exist.
+function updateClerkDriverAvailabilityState(assignedDriverSelect, saveButton) {
+	const hint = document.getElementById('clerkDriverHint');
+	if (!assignedDriverSelect) {
+		return;
+	}
+
+	const hasDriverOptions = assignedDriverSelect.options.length > 1;
+
+	if (saveButton) {
+		saveButton.disabled = !hasDriverOptions;
+	}
+
+	if (!hint) {
+		return;
+	}
+
+	if (!hasDriverOptions) {
+		hint.textContent = 'No drivers available. Ask the Manager/Admin to add at least one driver before creating consignments.';
+		return;
+	}
+
+	hint.textContent = '';
+}
+
+// Filter consignments by Clerk view controls.
+function getClerkFilteredConsignments(consignments) {
+	const searchInput = document.getElementById('clerkConsignmentSearch');
+	const statusSelect = document.getElementById('clerkConsignmentStatus');
+	const searchTerm = searchInput ? searchInput.value.trim().toLowerCase() : '';
+	const selectedStatus = statusSelect ? statusSelect.value : '';
+
+	return consignments.filter((consignment) => {
+		if (selectedStatus && consignment.status !== selectedStatus) {
+			return false;
+		}
+
+		if (!searchTerm) {
+			return true;
+		}
+
+		const searchableText = [
+			consignment.id,
+			consignment.senderName,
+			consignment.receiverName,
+			consignment.destination,
+			consignment.assignedDriverName
+		]
+			.filter(Boolean)
+			.join(' ')
+			.toLowerCase();
+
+		return searchableText.includes(searchTerm);
 	});
 }
 
@@ -456,23 +1038,47 @@ function initClerkDashboard(currentUser) {
 function renderClerkConsignmentsTable() {
 	const tbody = document.getElementById('clerkConsignmentsBody');
 	const dispatchSummary = document.getElementById('clerkDispatchSummary');
+	const totalConsignmentsElement = document.getElementById('clerkTotalConsignments');
+	const readyConsignmentsElement = document.getElementById('clerkReadyConsignments');
+	const deliveredConsignmentsElement = document.getElementById('clerkDeliveredConsignments');
 
 	if (!tbody) {
 		return;
 	}
 
 	const consignments = getConsignments();
+	const filteredConsignments = getClerkFilteredConsignments(consignments);
 	tbody.innerHTML = '';
 
+	if (totalConsignmentsElement) {
+		totalConsignmentsElement.textContent = String(consignments.length);
+	}
+
+	if (readyConsignmentsElement) {
+		readyConsignmentsElement.textContent = String(consignments.filter((item) => item.status === 'Ready for Dispatch').length);
+	}
+
+	if (deliveredConsignmentsElement) {
+		deliveredConsignmentsElement.textContent = String(consignments.filter((item) => item.status === 'Delivered').length);
+	}
+
 	if (consignments.length === 0) {
-		tbody.innerHTML = '<tr><td colspan="7">No consignments found.</td></tr>';
+		tbody.innerHTML = '<tr><td colspan="8">No consignments found.</td></tr>';
 		if (dispatchSummary) {
 			dispatchSummary.textContent = 'Dispatch summary: no consignments yet.';
 		}
 		return;
 	}
 
-	consignments.forEach((consignment) => {
+	if (filteredConsignments.length === 0) {
+		tbody.innerHTML = '<tr><td colspan="8">No consignments matched your filters.</td></tr>';
+		if (dispatchSummary) {
+			dispatchSummary.textContent = `Dispatch summary: showing 0 of ${consignments.length} consignment(s).`;
+		}
+		return;
+	}
+
+	filteredConsignments.forEach((consignment) => {
 		const row = document.createElement('tr');
 		row.innerHTML = `
 			<td>${consignment.id}</td>
@@ -482,6 +1088,7 @@ function renderClerkConsignmentsTable() {
 			<td>${Number(consignment.volume).toFixed(2)} m³</td>
 			<td>${formatCurrency(Number(consignment.cost) || 0)}</td>
 			<td><span class="status-pill ${statusClass(consignment.status)}">${consignment.status}</span></td>
+			<td>${consignment.assignedDriverName || '-'}</td>
 		`;
 
 		tbody.appendChild(row);
@@ -490,7 +1097,7 @@ function renderClerkConsignmentsTable() {
 	if (dispatchSummary) {
 		const activeConsignments = consignments.filter((item) => item.status !== 'Delivered');
 		const readyCount = activeConsignments.filter((item) => item.status === 'Ready for Dispatch').length;
-		dispatchSummary.textContent = `Dispatch summary: ${readyCount} consignment(s) ready for dispatch out of ${activeConsignments.length} active.`;
+		dispatchSummary.textContent = `Dispatch summary: ${readyCount} consignment(s) ready for dispatch out of ${activeConsignments.length} active. Showing ${filteredConsignments.length} result(s).`;
 	}
 }
 
@@ -613,12 +1220,26 @@ function refreshDispatchAssignments() {
 
 	sortedGroups.forEach((group, index) => {
 		const readyForDispatch = group.totalVolume >= 500;
-		const assignedDriver = readyForDispatch && drivers.length > 0 ? drivers[index % drivers.length] : null;
+		const autoAssignedDriver = readyForDispatch && drivers.length > 0 ? drivers[index % drivers.length] : null;
 
 		group.items.forEach((consignment) => {
 			consignment.status = readyForDispatch ? 'Ready for Dispatch' : 'Pending';
-			consignment.assignedDriverId = assignedDriver ? assignedDriver.id : null;
-			consignment.assignedDriverName = assignedDriver ? assignedDriver.fullName : null;
+
+			if (consignment.assignedDriverId) {
+				const existingDriver = drivers.find((driver) => Number(driver.id) === Number(consignment.assignedDriverId));
+				if (existingDriver) {
+					consignment.assignedDriverName = existingDriver.fullName;
+					return;
+				}
+			}
+
+			if (autoAssignedDriver) {
+				consignment.assignedDriverId = autoAssignedDriver.id;
+				consignment.assignedDriverName = autoAssignedDriver.fullName;
+			} else {
+				consignment.assignedDriverId = null;
+				consignment.assignedDriverName = null;
+			}
 		});
 	});
 
@@ -740,32 +1361,7 @@ function renderManagerDashboard() {
 		return;
 	}
 
-	const searchTerm = searchInput ? searchInput.value.trim().toLowerCase() : '';
-	const selectedStatus = statusSelect ? statusSelect.value : '';
-
-	const filteredConsignments = consignments.filter((consignment) => {
-		const statusMatch = !selectedStatus || consignment.status === selectedStatus;
-		if (!statusMatch) {
-			return false;
-		}
-
-		if (!searchTerm) {
-			return true;
-		}
-
-		const searchableText = [
-			consignment.id,
-			consignment.destination,
-			consignment.receiverName,
-			consignment.senderName,
-			consignment.assignedDriverName
-		]
-			.filter(Boolean)
-			.join(' ')
-			.toLowerCase();
-
-		return searchableText.includes(searchTerm);
-	});
+	const filteredConsignments = getFilteredManagerConsignments(consignments);
 
 	consignmentTrackingBody.innerHTML = '';
 
@@ -787,7 +1383,6 @@ function renderManagerDashboard() {
 
 		consignmentTrackingBody.appendChild(row);
 	});
-	}
 }
 
 // Ensure a default Manager account exists in localStorage.
@@ -898,6 +1493,83 @@ function statusClass(status) {
 // Format currency values.
 function formatCurrency(amount) {
 	return `GHS ${Number(amount).toFixed(2)}`;
+}
+
+// Validate email format.
+function isValidEmail(email) {
+	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
+}
+
+// Validate full name.
+function isValidName(name) {
+	return /^[A-Za-z][A-Za-z\s'.-]{1,}$/.test(String(name || '').trim());
+}
+
+// Validate address text.
+function isValidAddress(address) {
+	return String(address || '').trim().length >= 5;
+}
+
+// Validate destination text.
+function isValidDestination(destination) {
+	return String(destination || '').trim().length >= 2;
+}
+
+// Remove all inline field errors inside a form.
+function clearInlineErrors(formElement) {
+	if (!formElement) {
+		return;
+	}
+
+	const invalidFields = formElement.querySelectorAll('.input-invalid');
+	invalidFields.forEach((field) => {
+		field.classList.remove('input-invalid');
+	});
+
+	const errorElements = formElement.querySelectorAll('.field-error');
+	errorElements.forEach((errorElement) => {
+		errorElement.remove();
+	});
+}
+
+// Show inline field error text for an input/select.
+function setInlineError(fieldElement, message) {
+	if (!fieldElement || !message) {
+		return;
+	}
+
+	fieldElement.classList.add('input-invalid');
+
+	const parentGroup = fieldElement.closest('.form-group');
+	if (!parentGroup) {
+		return;
+	}
+
+	const existingError = parentGroup.querySelector('.field-error');
+	if (existingError) {
+		existingError.textContent = message;
+		return;
+	}
+
+	const errorText = document.createElement('p');
+	errorText.className = 'field-error';
+	errorText.textContent = message;
+	parentGroup.appendChild(errorText);
+}
+
+// Escape values for CSV columns.
+function escapeCsv(value) {
+	return String(value ?? '').replace(/"/g, '""');
+}
+
+// Escape values for generated HTML report.
+function escapeHtml(value) {
+	return String(value ?? '')
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
 }
 
 // Show a success or error message in the UI.
