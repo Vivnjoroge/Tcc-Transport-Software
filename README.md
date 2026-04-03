@@ -13,3 +13,4 @@
 - In this pure front-end setup, browser JavaScript cannot directly use SQLite files without adding a backend service or a special in-browser SQLite library.
 - For now, auth uses localStorage so development can continue step-by-step.
 - Next backend step (optional): connect forms to a small API (Node.js + SQLite) and replace localStorage auth.
+# Motor-shop
