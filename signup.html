@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TCC System - Customer Signup</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="auth-page">
+  <main class="auth-container">
+    <section class="auth-visual" aria-label="Transport illustration">
+      <div class="auth-brand-mark">
+        <img src="assets/tcc-logo.svg" alt="TCC logo" class="auth-logo" />
+        <div>
+          <p class="brand-kicker">TCC System</p>
+          <h2>Join our logistics network</h2>
+        </div>
+      </div>
+      <img
+        src="assets/transport-illustration.svg"
+        alt="Illustration of buses and logistics transport"
+        class="auth-transport-img"
+      />
+      <p class="auth-visual-note">Submit consignments and track your shipments with ease.</p>
+    </section>
+
+    <section class="auth-card">
+      <div class="auth-card-logo-row">
+        <img src="assets/tcc-logo.svg" alt="TCC logo" class="auth-logo" />
+        <span>TCC</span>
+      </div>
+      <h1>Customer Signup</h1>
+      <p class="auth-subtitle">Create your account to start shipping</p>
+
+      <div id="signupMessage" class="message" role="alert" aria-live="polite"></div>
+
+      <form id="signupForm" novalidate>
+        <div class="form-group">
+          <label for="signupFullName">Full Name</label>
+          <input type="text" id="signupFullName" name="signupFullName" placeholder="Enter your full name" />
+        </div>
+
+        <div class="form-group">
+          <label for="signupEmail">Email</label>
+          <input type="email" id="signupEmail" name="signupEmail" placeholder="Enter email" />
+        </div>
+
+        <div class="form-group">
+          <label for="signupPassword">Password</label>
+          <input
+            type="password"
+            id="signupPassword"
+            name="signupPassword"
+            placeholder="Create a password"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="signupConfirmPassword">Confirm Password</label>
+          <input
+            type="password"
+            id="signupConfirmPassword"
+            name="signupConfirmPassword"
+            placeholder="Confirm your password"
+          />
+        </div>
+
+        <button type="submit" class="btn-primary">Sign Up</button>
+      </form>
+
+      <p class="auth-note">
+        Already have an account? <a href="index.html">Login here</a>
+      </p>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

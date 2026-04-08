@@ -2,8 +2,17 @@
 const USERS_STORAGE_KEY = 'tcc_users';
 const CURRENT_USER_STORAGE_KEY = 'tcc_current_user';
 const CONSIGNMENTS_STORAGE_KEY = 'tcc_consignments';
+const TRUCKS_STORAGE_KEY = 'tcc_trucks';
+const TRUCK_LOGS_STORAGE_KEY = 'tcc_truck_logs';
 
-const MANAGED_ROLES = ['Clerk', 'Driver'];
+const MANAGED_ROLES = ['Clerk', 'Driver', 'Customer'];
+
+// Default Trucks config
+const DEFAULT_TRUCKS = [
+	{ id: 1, truckNumber: 'T-101', status: 'Available', currentLocation: 'Accra', lastAssignedAt: null },
+	{ id: 2, truckNumber: 'T-102', status: 'Available', currentLocation: 'Accra', lastAssignedAt: null },
+	{ id: 3, truckNumber: 'T-103', status: 'Available', currentLocation: 'Accra', lastAssignedAt: null }
+];
 
 // Default Manager account required by the system.
 const DEFAULT_MANAGER_ACCOUNT = {
@@ -15,22 +24,94 @@ const DEFAULT_MANAGER_ACCOUNT = {
 
 // Billing rates per destination (simple setup).
 const DESTINATION_RATES = {
-	accra: 12,
-	kumasi: 14,
-	takoradi: 16,
-	tamale: 18,
-	koforidua: 13,
-	sunyani: 15
+	nairobi: 12,
+	mombasa: 18,
+	kwale: 20,
+	kilifi: 20,
+	'tana river': 25,
+	lamu: 28,
+	taita_taveta: 22,
+	garissa: 30,
+	wajir: 35,
+	mandera: 40,
+	marsabit: 35,
+	isicolo: 28,
+	meru: 15,
+	tharaka_nithi: 18,
+	embu: 15,
+	kitui: 20,
+	machakos: 12,
+	makueni: 18,
+	nyandarua: 15,
+	nyeri: 15,
+	kirinyaga: 15,
+	muranga: 14,
+	kiambu: 10,
+	turkana: 45,
+	'west pokot': 35,
+	samburu: 32,
+	'trans nzoia': 22,
+	'uasin gishu': 20,
+	'elgeyo marakwet': 22,
+	nandi: 20,
+	baringo: 25,
+	laikipia: 22,
+	nakuru: 14,
+	narok: 20,
+	kajiado: 12,
+	kericho: 18,
+	bomet: 20,
+	kakamega: 22,
+	vihiga: 22,
+	bungoma: 24,
+	busia: 25,
+	siaya: 24,
+	kisumu: 20,
+	'homa bay': 25,
+	migori: 26,
+	kisii: 22,
+	nyamira: 22
 };
 
 const DEFAULT_RATE = 10;
 
+// Volume threshold for truck assignment
+const VOLUME_THRESHOLD = 500;
+
 // Run page-specific setup once the HTML is loaded.
 document.addEventListener('DOMContentLoaded', () => {
 	ensureDefaultManagerAccount();
+	ensureDefaultTrucks();
 	initLoginPage();
+	initSignupPage();
 	initDashboardPage();
 });
+
+// helper to ensure trucks exist
+function ensureDefaultTrucks() {
+	if (!localStorage.getItem(TRUCKS_STORAGE_KEY)) {
+		localStorage.setItem(TRUCKS_STORAGE_KEY, JSON.stringify(DEFAULT_TRUCKS));
+	}
+}
+
+// truck log helpers
+function getTruckLogs() {
+	const raw = localStorage.getItem(TRUCK_LOGS_STORAGE_KEY);
+	return raw ? JSON.parse(raw) : [];
+}
+
+function saveTruckLogs(logs) {
+	localStorage.setItem(TRUCK_LOGS_STORAGE_KEY, JSON.stringify(logs));
+}
+
+function getTrucks() {
+	const raw = localStorage.getItem(TRUCKS_STORAGE_KEY);
+	return raw ? JSON.parse(raw) : [];
+}
+
+function saveTrucks(trucks) {
+	localStorage.setItem(TRUCKS_STORAGE_KEY, JSON.stringify(trucks));
+}
 
 // Initialize login behavior.
 function initLoginPage() {
@@ -97,6 +178,95 @@ function initLoginPage() {
 	});
 }
 
+/**
+ * Initialize signup behavior.
+ */
+function initSignupPage() {
+	const signupForm = document.getElementById('signupForm');
+
+	if (!signupForm) {
+		return;
+	}
+
+	const messageBox = document.getElementById('signupMessage');
+
+	signupForm.addEventListener('submit', (event) => {
+		event.preventDefault();
+		clearInlineErrors(signupForm);
+
+		const fullName = document.getElementById('signupFullName').value.trim();
+		const email = document.getElementById('signupEmail').value.trim().toLowerCase();
+		const password = document.getElementById('signupPassword').value;
+		const confirmPassword = document.getElementById('signupConfirmPassword').value;
+
+		let hasError = false;
+
+		if (!fullName) {
+			setInlineError(document.getElementById('signupFullName'), 'Full Name is required.');
+			hasError = true;
+		} else if (!isValidName(fullName)) {
+			setInlineError(document.getElementById('signupFullName'), 'Enter a valid full name (letters and spaces only).');
+			hasError = true;
+		}
+
+		if (!email) {
+			setInlineError(document.getElementById('signupEmail'), 'Email is required.');
+			hasError = true;
+		} else if (!isValidEmail(email)) {
+			setInlineError(document.getElementById('signupEmail'), 'Enter a valid email address.');
+			hasError = true;
+		}
+
+		if (!password) {
+			setInlineError(document.getElementById('signupPassword'), 'Password is required.');
+			hasError = true;
+		} else if (password.length < 6) {
+			setInlineError(document.getElementById('signupPassword'), 'Password must be at least 6 characters.');
+			hasError = true;
+		}
+
+		if (!confirmPassword) {
+			setInlineError(document.getElementById('signupConfirmPassword'), 'Please confirm your password.');
+			hasError = true;
+		} else if (password !== confirmPassword) {
+			setInlineError(document.getElementById('signupConfirmPassword'), 'Passwords do not match.');
+			hasError = true;
+		}
+
+		if (hasError) {
+			showMessage(messageBox, 'Please fix the errors below.', 'error');
+			return;
+		}
+
+		const users = getUsers();
+		const userExists = users.some((user) => user.email === email);
+
+		if (userExists) {
+			setInlineError(document.getElementById('signupEmail'), 'Email is already registered.');
+			showMessage(messageBox, 'This email is already registered.', 'error');
+			return;
+		}
+
+		const newUser = {
+			id: Date.now(),
+			fullName,
+			email,
+			password,
+			role: 'Customer',
+			createdAt: new Date().toISOString()
+		};
+
+		users.push(newUser);
+		saveUsers(users);
+
+		showMessage(messageBox, 'Registration successful. You can now login.', 'success');
+
+		setTimeout(() => {
+			window.location.href = 'index.html';
+		}, 1500);
+	});
+}
+
 // Initialize dashboard and route user to role-specific view.
 function initDashboardPage() {
 	const dashboardLayout = document.querySelector('.dashboard-layout');
@@ -110,6 +280,8 @@ function initDashboardPage() {
 		window.location.href = 'index.html';
 		return;
 	}
+
+	initProfileManagement(currentUser);
 
 	const welcomeText = document.getElementById('welcomeText');
 	const roleLabel = document.getElementById('sidebarRoleLabel');
@@ -156,6 +328,12 @@ function initDashboardPage() {
 	if (currentUser.role === 'Driver') {
 		setRoleNotice(roleNotice, 'Driver dashboard active: view assigned deliveries and update status.', 'info');
 		initDriverDashboard(currentUser);
+		return;
+	}
+
+	if (currentUser.role === 'Customer') {
+		setRoleNotice(roleNotice, 'Customer dashboard active: submit consignments and track your items.', 'success');
+		initCustomerDashboard(currentUser);
 		return;
 	}
 
@@ -253,7 +431,8 @@ function applyRoleVisibility(role) {
 	const roleSections = {
 		Manager: document.getElementById('managerSection'),
 		Clerk: document.getElementById('clerkSection'),
-		Driver: document.getElementById('driverSection')
+		Driver: document.getElementById('driverSection'),
+		Customer: document.getElementById('customerSection')
 	};
 
 	Object.entries(roleSections).forEach(([sectionRole, sectionElement]) => {
@@ -275,6 +454,105 @@ function applyRoleVisibility(role) {
 	if (firstVisibleNav) {
 		firstVisibleNav.classList.add('active');
 	}
+}
+
+/**
+ * Initialize profile management for the logged-in user.
+ */
+function initProfileManagement(currentUser) {
+	const profileForm = document.getElementById('profileForm');
+	if (!profileForm) return;
+
+	const fullNameInput = document.getElementById('profileFullName');
+	const emailInput = document.getElementById('profileEmail');
+	const passwordInput = document.getElementById('profilePassword');
+	const confirmPasswordInput = document.getElementById('profileConfirmPassword');
+	const messageBox = document.getElementById('profileMessage');
+
+	// Nav items for profile
+	const profileNavItems = document.querySelectorAll('.nav-item[href="#profileSection"]');
+	const sections = document.querySelectorAll('.dashboard-section');
+
+	// Pre-fill
+	if (fullNameInput) fullNameInput.value = currentUser.fullName;
+	if (emailInput) emailInput.value = currentUser.email;
+
+	profileNavItems.forEach(item => {
+		item.addEventListener('click', (e) => {
+			e.preventDefault();
+			
+			// Hide all top-level sections
+			sections.forEach(s => s.classList.add('hidden'));
+			
+			// Show profile section
+			const profileSection = document.getElementById('profileSection');
+			if (profileSection) profileSection.classList.remove('hidden');
+
+			// Update active class on nav items
+			document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+			item.classList.add('active');
+		});
+	});
+
+	profileForm.addEventListener('submit', (e) => {
+		e.preventDefault();
+		clearInlineErrors(profileForm);
+
+		const newFullName = fullNameInput.value.trim();
+		const newPassword = passwordInput.value;
+		const confirmPassword = confirmPasswordInput.value;
+
+		let hasError = false;
+
+		if (!newFullName) {
+			setInlineError(fullNameInput, 'Full Name is required.');
+			hasError = true;
+		}
+
+		if (newPassword && newPassword.length < 6) {
+			setInlineError(passwordInput, 'Password must be at least 6 characters.');
+			hasError = true;
+		}
+
+		if (newPassword !== confirmPassword) {
+			setInlineError(confirmPasswordInput, 'Passwords do not match.');
+			hasError = true;
+		}
+
+		if (hasError) {
+			showMessage(messageBox, 'Please fix the errors below.', 'error');
+			return;
+		}
+
+		const users = getUsers();
+		const userIndex = users.findIndex(u => u.email === currentUser.email);
+
+		if (userIndex !== -1) {
+			users[userIndex].fullName = newFullName;
+			if (newPassword) {
+				users[userIndex].password = newPassword;
+			}
+			saveUsers(users);
+
+			// Update session
+			currentUser.fullName = newFullName;
+			localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(currentUser));
+
+			showMessage(messageBox, 'Profile updated successfully.', 'success');
+			
+			// Update welcome text if it exists
+			const welcomeText = document.getElementById('welcomeText');
+			if (welcomeText) {
+				welcomeText.textContent = `Welcome, ${currentUser.fullName} (${currentUser.role})`;
+			}
+
+			// Clear password fields
+			passwordInput.value = '';
+			confirmPasswordInput.value = '';
+		} else {
+			showMessage(messageBox, 'User not found.', 'error');
+		}
+	});
 }
 
 // Initialize Manager tracking controls for consignment filtering.
@@ -550,9 +828,18 @@ function exportManagerReportPdf() {
 function initManagerUserManagement() {
 	const manageUserForm = document.getElementById('manageUserForm');
 	const managedUsersBody = document.getElementById('managedUsersBody');
+	const roleInput = document.getElementById('managedRole');
 
 	if (!manageUserForm || !managedUsersBody) {
 		return;
+	}
+
+	// Update roles dropdown if needed
+	if (roleInput && roleInput.options.length <= 3) {
+		const customerOpt = document.createElement('option');
+		customerOpt.value = 'Customer';
+		customerOpt.textContent = 'Customer';
+		roleInput.appendChild(customerOpt);
 	}
 
 	const messageBox = document.getElementById('manageUserMessage');
@@ -560,7 +847,6 @@ function initManagerUserManagement() {
 	const fullNameInput = document.getElementById('managedFullName');
 	const emailInput = document.getElementById('managedEmail');
 	const passwordInput = document.getElementById('managedPassword');
-	const roleInput = document.getElementById('managedRole');
 	const addUserBtn = document.getElementById('addUserBtn');
 	const cancelEditBtn = document.getElementById('cancelEditUserBtn');
 
@@ -832,95 +1118,76 @@ function initClerkDashboard(currentUser) {
 		event.preventDefault();
 		clearInlineErrors(form);
 
-		const senderName = document.getElementById('senderName').value.trim();
-		const senderAddress = document.getElementById('senderAddress').value.trim();
-		const receiverName = document.getElementById('receiverName').value.trim();
-		const receiverAddress = document.getElementById('receiverAddress').value.trim();
-		const destination = document.getElementById('destination').value.trim();
-		const volume = Number(document.getElementById('volume').value);
+		const senderNameInput = document.getElementById('senderName');
+		const senderAddressInput = document.getElementById('senderAddress');
+		const receiverNameInput = document.getElementById('receiverName');
+		const receiverAddressInput = document.getElementById('receiverAddress');
+		const destinationSelect = document.getElementById('destination');
+		const volumeInput = document.getElementById('volume');
+
+		const senderName = senderNameInput.value.trim();
+		const senderAddress = senderAddressInput.value.trim();
+		const receiverName = receiverNameInput.value.trim();
+		const receiverAddress = receiverAddressInput.value.trim();
+		const destination = destinationSelect.value.trim();
+		const volume = Number(volumeInput.value);
 		const selectedDriverId = assignedDriverSelect ? Number(assignedDriverSelect.value) : 0;
 		const selectedDriver = getUsers().find((user) => user.role === 'Driver' && Number(user.id) === selectedDriverId);
 
-		if (!senderName || !senderAddress || !receiverName || !receiverAddress || !destination || !volume || !selectedDriverId) {
-			if (!senderName) {
-				setInlineError(document.getElementById('senderName'), 'Sender name is required.');
-			}
+		let hasError = false;
 
-			if (!senderAddress) {
-				setInlineError(document.getElementById('senderAddress'), 'Sender address is required.');
-			}
-
-			if (!receiverName) {
-				setInlineError(document.getElementById('receiverName'), 'Receiver name is required.');
-			}
-
-			if (!receiverAddress) {
-				setInlineError(document.getElementById('receiverAddress'), 'Receiver address is required.');
-			}
-
-			if (!destination) {
-				setInlineError(document.getElementById('destination'), 'Destination is required.');
-			}
-
-			if (!volume) {
-				setInlineError(document.getElementById('volume'), 'Volume is required.');
-			}
-
-			if (!selectedDriverId && assignedDriverSelect) {
-				setInlineError(assignedDriverSelect, 'Driver assignment is required.');
-			}
-
-			showMessage(messageBox, 'Please fill in all fields.', 'error');
-			return;
+		if (!senderName) {
+			setInlineError(senderNameInput, 'Sender name is required.');
+			hasError = true;
+		} else if (senderName.length < 2) {
+			setInlineError(senderNameInput, 'Name must be at least 2 characters.');
+			hasError = true;
 		}
 
-		if (!isValidName(senderName)) {
-			setInlineError(document.getElementById('senderName'), 'Enter at least 2 letters for sender name.');
-			showMessage(messageBox, 'Please enter a valid sender name (at least 2 letters).', 'error');
-			return;
+		if (!senderAddress) {
+			setInlineError(senderAddressInput, 'Sender address is required.');
+			hasError = true;
+		} else if (senderAddress.length < 5) {
+			setInlineError(senderAddressInput, 'Address must be at last 5 characters.');
+			hasError = true;
 		}
 
-		if (!isValidName(receiverName)) {
-			setInlineError(document.getElementById('receiverName'), 'Enter at least 2 letters for receiver name.');
-			showMessage(messageBox, 'Please enter a valid receiver name (at least 2 letters).', 'error');
-			return;
+		if (!receiverName) {
+			setInlineError(receiverNameInput, 'Receiver name is required.');
+			hasError = true;
+		} else if (receiverName.length < 2) {
+			setInlineError(receiverNameInput, 'Name must be at least 2 characters.');
+			hasError = true;
 		}
 
-		if (!isValidAddress(senderAddress)) {
-			setInlineError(document.getElementById('senderAddress'), 'Address must be at least 5 characters.');
-			showMessage(messageBox, 'Sender address must be at least 5 characters.', 'error');
-			return;
+		if (!receiverAddress) {
+			setInlineError(receiverAddressInput, 'Receiver address is required.');
+			hasError = true;
+		} else if (receiverAddress.length < 5) {
+			setInlineError(receiverAddressInput, 'Address must be at least 5 characters.');
+			hasError = true;
 		}
 
-		if (!isValidAddress(receiverAddress)) {
-			setInlineError(document.getElementById('receiverAddress'), 'Address must be at least 5 characters.');
-			showMessage(messageBox, 'Receiver address must be at least 5 characters.', 'error');
-			return;
+		if (!destination) {
+			setInlineError(destinationSelect, 'Destination is required.');
+			hasError = true;
 		}
 
-		if (!isValidDestination(destination)) {
-			setInlineError(document.getElementById('destination'), 'Destination must be at least 2 characters.');
-			showMessage(messageBox, 'Destination must be at least 2 characters.', 'error');
-			return;
+		if (volumeInput.value === '') {
+			setInlineError(volumeInput, 'Volume is required.');
+			hasError = true;
+		} else if (isNaN(volume) || volume <= 0) {
+			setInlineError(volumeInput, 'Volume must be greater than 0.');
+			hasError = true;
 		}
 
-		if (!selectedDriver) {
-			if (assignedDriverSelect) {
-				setInlineError(assignedDriverSelect, 'Please select a valid driver.');
-			}
-			showMessage(messageBox, 'Please select a valid driver.', 'error');
-			return;
+		if (!selectedDriverId) {
+			setInlineError(assignedDriverSelect, 'Please assign a driver.');
+			hasError = true;
 		}
 
-		if (volume <= 0) {
-			setInlineError(document.getElementById('volume'), 'Volume must be greater than 0.');
-			showMessage(messageBox, 'Volume must be greater than 0.', 'error');
-			return;
-		}
-
-		if (volume > 100000) {
-			setInlineError(document.getElementById('volume'), 'Please enter a realistic volume value.');
-			showMessage(messageBox, 'Volume is too large. Please enter a realistic value.', 'error');
+		if (hasError) {
+			showMessage(messageBox, 'Please fix the errors below.', 'error');
 			return;
 		}
 
@@ -1182,7 +1449,39 @@ function markConsignmentAsDelivered(consignmentId, driverId) {
 		return;
 	}
 
+	const currentTime = new Date().toISOString();
 	consignment.status = 'Delivered';
+	consignment.deliveredAt = currentTime;
+
+	// check if all consignments on that truck are delivered
+	if (consignment.assignedTruckId) {
+		const truckId = consignment.assignedTruckId;
+		const otherConsignments = consignments.filter(c => 
+			c.assignedTruckId === truckId && 
+			c.status !== 'Delivered'
+		);
+
+		if (otherConsignments.length === 0) {
+			const trucks = getTrucks();
+			const truck = trucks.find(t => t.id === truckId);
+			if (truck) {
+				truck.status = 'Available';
+				truck.currentLocation = consignment.destination;
+				truck.idleStartAt = currentTime;
+				saveTrucks(trucks);
+			}
+
+			// update log if exists
+			const logs = getTruckLogs();
+			const log = logs.find(l => l.truckId === truckId && !l.arrivedAt);
+			if (log) {
+				log.arrivedAt = currentTime;
+				log.idleStartAt = currentTime;
+				saveTruckLogs(logs);
+			}
+		}
+	}
+
 	saveConsignments(consignments);
 }
 
@@ -1193,8 +1492,11 @@ function refreshDispatchAssignments() {
 		return;
 	}
 
+	const trucks = getTrucks();
+	const logs = getTruckLogs();
 	const drivers = getUsers().filter((user) => user.role === 'Driver');
-	const activeConsignments = consignments.filter((item) => item.status !== 'Delivered');
+
+	const activeConsignments = consignments.filter((item) => (item.status === 'Pending' || item.status === 'Ready for Dispatch'));
 	const destinationGroups = new Map();
 
 	activeConsignments.forEach((consignment) => {
@@ -1214,41 +1516,78 @@ function refreshDispatchAssignments() {
 		group.totalVolume += Number(consignment.volume) || 0;
 	});
 
-	const sortedGroups = Array.from(destinationGroups.values()).sort((a, b) =>
-		a.destination.localeCompare(b.destination)
-	);
+	let changed = false;
 
-	sortedGroups.forEach((group, index) => {
-		const readyForDispatch = group.totalVolume >= 500;
-		const autoAssignedDriver = readyForDispatch && drivers.length > 0 ? drivers[index % drivers.length] : null;
+	destinationGroups.forEach((group) => {
+		const destinationKey = group.destination.toLowerCase();
+		
+		// Requirement: When volume becomes 500, allot the next available truck.
+		if (group.totalVolume >= VOLUME_THRESHOLD) {
+			const pendingItems = group.items.filter(i => i.status === 'Pending');
+			
+			if (pendingItems.length > 0) {
+				// Find available truck
+				const availableTruck = trucks.find(t => t.status === 'Available');
+				const availableDriver = drivers[0]; // Simplification for allotment
 
-		group.items.forEach((consignment) => {
-			consignment.status = readyForDispatch ? 'Ready for Dispatch' : 'Pending';
+				if (availableTruck) {
+					availableTruck.status = 'Busy';
+					availableTruck.lastAssignedAt = new Date().toISOString();
+					
+					const dispatchTime = new Date().toISOString();
+					const consignmentNumbers = [];
 
-			if (consignment.assignedDriverId) {
-				const existingDriver = drivers.find((driver) => Number(driver.id) === Number(consignment.assignedDriverId));
-				if (existingDriver) {
-					consignment.assignedDriverName = existingDriver.fullName;
-					return;
+					group.items.forEach((consignment) => {
+						consignment.status = 'In Transit';
+						consignment.assignedTruckId = availableTruck.id;
+						consignment.dispatchedAt = dispatchTime;
+						consignmentNumber = consignment.id;
+						consignmentNumbers.push(consignment.id);
+						
+						if (availableDriver) {
+							consignment.assignedDriverId = availableDriver.id;
+							consignment.assignedDriverName = availableDriver.fullName;
+						}
+					});
+
+					// Create usage log
+					logs.push({
+						id: Date.now(),
+						truckId: availableTruck.id,
+						truckNumber: availableTruck.truckNumber,
+						destination: group.destination,
+						consignmentIds: consignmentNumbers,
+						dispatchedAt: dispatchTime,
+						totalVolume: group.totalVolume
+					});
+
+					changed = true;
+				} else {
+					// No truck available, mark as 'Ready for Dispatch'
+					group.items.forEach(c => {
+						if (c.status === 'Pending') {
+							c.status = 'Ready for Dispatch';
+							changed = true;
+						}
+					});
 				}
 			}
-
-			if (autoAssignedDriver) {
-				consignment.assignedDriverId = autoAssignedDriver.id;
-				consignment.assignedDriverName = autoAssignedDriver.fullName;
-			} else {
-				consignment.assignedDriverId = null;
-				consignment.assignedDriverName = null;
-			}
-		});
+		}
 	});
 
-	saveConsignments(consignments);
+	if (changed) {
+		saveConsignments(consignments);
+		saveTrucks(trucks);
+		saveTruckLogs(logs);
+	}
 }
 
 // Populate manager report cards and destination summary table.
 function renderManagerDashboard() {
 	const consignments = getConsignments();
+	const trucks = getTrucks();
+	const logs = getTruckLogs();
+
 	const totalRevenueElement = document.getElementById('totalRevenue');
 	const totalConsignmentsElement = document.getElementById('totalConsignments');
 	const totalDestinationsElement = document.getElementById('totalDestinations');
@@ -1258,48 +1597,11 @@ function renderManagerDashboard() {
 	const truckStatusSummaryElement = document.getElementById('truckStatusSummary');
 	const truckStatusBody = document.getElementById('truckStatusBody');
 	const consignmentTrackingBody = document.getElementById('consignmentTrackingBody');
-	const searchInput = document.getElementById('managerTrackSearch');
-	const statusSelect = document.getElementById('managerTrackStatus');
 
-	const destinationMap = new Map();
-	let totalRevenue = 0;
-	let pendingCount = 0;
-	let readyCount = 0;
-	let deliveredCount = 0;
-
-	consignments.forEach((consignment) => {
-		const status = consignment.status || 'Pending';
-		totalRevenue += Number(consignment.cost) || 0;
-
-		if (status === 'Delivered') {
-			deliveredCount += 1;
-		} else if (status === 'Ready for Dispatch') {
-			readyCount += 1;
-		} else {
-			pendingCount += 1;
-		}
-
-		const destination = consignment.destination || 'Unknown';
-		const volume = Number(consignment.volume) || 0;
-
-		if (!destinationMap.has(destination)) {
-			destinationMap.set(destination, {
-				totalVolume: 0,
-				hasReady: false,
-				assignedDriverName: null
-			});
-		}
-
-		const entry = destinationMap.get(destination);
-		entry.totalVolume += volume;
-		if (status === 'Ready for Dispatch') {
-			entry.hasReady = true;
-			entry.assignedDriverName = consignment.assignedDriverName || entry.assignedDriverName;
-		}
-	});
+	const stats = computeTccStats(consignments, logs);
 
 	if (totalRevenueElement) {
-		totalRevenueElement.textContent = formatCurrency(totalRevenue);
+		totalRevenueElement.textContent = formatCurrency(stats.totalRevenue);
 	}
 
 	if (totalConsignmentsElement) {
@@ -1307,82 +1609,113 @@ function renderManagerDashboard() {
 	}
 
 	if (totalDestinationsElement) {
-		totalDestinationsElement.textContent = String(destinationMap.size);
+		totalDestinationsElement.textContent = String(stats.destinations.size);
 	}
 
 	if (totalPendingElement) {
-		totalPendingElement.textContent = String(pendingCount);
+		totalPendingElement.textContent = String(stats.pendingCount);
 	}
 
 	if (totalReadyElement) {
-		totalReadyElement.textContent = String(readyCount);
+		totalReadyElement.textContent = String(stats.readyCount);
 	}
 
 	if (totalDeliveredElement) {
-		totalDeliveredElement.textContent = String(deliveredCount);
+		totalDeliveredElement.textContent = String(stats.deliveredCount);
 	}
 
-	const readyTruckCount = Array.from(destinationMap.values()).filter((details) => details.totalVolume >= 500).length;
+	// Average stats (requirement)
+	const avgWaitingElement = document.getElementById('avgWaitingPeriod');
+	const avgIdleElement = document.getElementById('avgIdleTime');
+	if (avgWaitingElement) avgWaitingElement.textContent = stats.avgWaitingTimeText;
+	if (avgIdleElement) avgIdleElement.textContent = stats.avgIdleTimeText;
+
 	if (truckStatusSummaryElement) {
-		if (destinationMap.size === 0) {
-			truckStatusSummaryElement.textContent = 'No active consignments yet. Truck status will appear when consignments are added.';
-		} else {
-			const driverCount = getUsers().filter((user) => user.role === 'Driver').length;
-			truckStatusSummaryElement.textContent = `${readyTruckCount} destination(s) ready for dispatch (volume ≥ 500). Drivers available: ${driverCount}.`;
-		}
+		const readyCount = trucks.filter(t => t.status === 'Available').length;
+		truckStatusSummaryElement.textContent = `${readyCount} truck(s) available. Allotment threshold: ${VOLUME_THRESHOLD} m³ per destination.`;
 	}
 
 	if (truckStatusBody) {
 		truckStatusBody.innerHTML = '';
+		trucks.forEach(truck => {
+			const row = document.createElement('tr');
+			row.innerHTML = `
+				<td>${truck.truckNumber}</td>
+				<td>${truck.currentLocation}</td>
+				<td>${truck.status}</td>
+				<td>${truck.lastAssignedAt ? new Date(truck.lastAssignedAt).toLocaleString() : '-'}</td>
+			`;
+			truckStatusBody.appendChild(row);
+		});
+	}
 
-		if (destinationMap.size === 0) {
-			truckStatusBody.innerHTML = '<tr><td colspan="4">No truck status data available yet.</td></tr>';
+	if (consignmentTrackingBody) {
+		const filteredConsignments = getFilteredManagerConsignments(consignments);
+		consignmentTrackingBody.innerHTML = '';
+
+		if (filteredConsignments.length === 0) {
+			consignmentTrackingBody.innerHTML = '<tr><td colspan="6">No consignments matched your filters.</td></tr>';
 		} else {
-			for (const [destination, details] of destinationMap.entries()) {
-				const isReady = details.totalVolume >= 500;
+			filteredConsignments.forEach((consignment) => {
 				const row = document.createElement('tr');
-				if (isReady) {
-					row.classList.add('row-ready');
-				}
-
 				row.innerHTML = `
-					<td>${destination}</td>
-					<td>${details.totalVolume.toFixed(2)} m³</td>
-					<td>${isReady ? 'Ready for Dispatch' : 'Pending'}</td>
-					<td>${details.assignedDriverName || '-'}</td>
+					<td>${consignment.id}</td>
+					<td>${consignment.destination || '-'}</td>
+					<td>${consignment.receiverName || '-'}</td>
+					<td>${Number(consignment.volume || 0).toFixed(2)} m³</td>
+					<td><span class="status-pill ${statusClass(consignment.status)}">${consignment.status || 'Pending'}</span></td>
+					<td>${consignment.assignedDriverName || '-'}</td>
 				`;
-
-				truckStatusBody.appendChild(row);
-			}
+				consignmentTrackingBody.appendChild(row);
+			});
 		}
 	}
+}
 
-	if (!consignmentTrackingBody) {
-		return;
-	}
+// Requirement logic helper
+function computeTccStats(consignments, logs) {
+	let totalRevenue = 0;
+	let pendingCount = 0;
+	let readyCount = 0;
+	let deliveredCount = 0;
+	const destinations = new Set();
+	let totalWaitTime = 0;
+	let deliveredCounter = 0;
 
-	const filteredConsignments = getFilteredManagerConsignments(consignments);
-
-	consignmentTrackingBody.innerHTML = '';
-
-	if (filteredConsignments.length === 0) {
-		consignmentTrackingBody.innerHTML = '<tr><td colspan="6">No consignments matched your filters.</td></tr>';
-		return;
-	}
-
-	filteredConsignments.forEach((consignment) => {
-		const row = document.createElement('tr');
-		row.innerHTML = `
-			<td>${consignment.id}</td>
-			<td>${consignment.destination || '-'}</td>
-			<td>${consignment.receiverName || '-'}</td>
-			<td>${Number(consignment.volume || 0).toFixed(2)} m³</td>
-			<td><span class="status-pill ${statusClass(consignment.status)}">${consignment.status || 'Pending'}</span></td>
-			<td>${consignment.assignedDriverName || '-'}</td>
-		`;
-
-		consignmentTrackingBody.appendChild(row);
+	consignments.forEach(c => {
+		totalRevenue += c.cost;
+		destinations.add(c.destination);
+		if (c.status === 'Pending') pendingCount++;
+		else if (c.status === 'Ready for Dispatch') readyCount++;
+		else if (c.status === 'Delivered') {
+			deliveredCount++;
+			if (c.created_at && c.deliveredAt) {
+				const wait = new Date(c.deliveredAt) - new Date(c.created_at);
+				totalWaitTime += wait;
+				deliveredCounter++;
+			}
+		}
 	});
+
+	let totalIdleTime = 0;
+	let logCounter = 0;
+	logs.forEach(l => {
+		if (l.idleStartAt && l.arrivedAt) {
+			const idle = new Date(l.arrivedAt) - new Date(l.idleStartAt);
+			totalIdleTime += idle;
+			logCounter++;
+		}
+	});
+
+	return {
+		totalRevenue,
+		pendingCount,
+		readyCount,
+		deliveredCount,
+		destinations,
+		avgWaitingTimeText: deliveredCounter ? `${(totalWaitTime / deliveredCounter / 3600000).toFixed(1)} hrs` : 'N/A',
+		avgIdleTimeText: logCounter ? `${(totalIdleTime / logCounter / 3600000).toFixed(1)} hrs` : 'N/A'
+	};
 }
 
 // Ensure a default Manager account exists in localStorage.
@@ -1475,6 +1808,121 @@ function getRateForDestination(destination) {
 function generateConsignmentId() {
 	const randomPart = Math.floor(Math.random() * 900 + 100);
 	return `CNS-${Date.now()}-${randomPart}`;
+}
+
+function initCustomerDashboard(currentUser) {
+	const form = document.getElementById('customerConsignmentForm');
+	if (!form) return;
+
+	const messageBox = document.getElementById('customerMessage');
+	const billingResult = document.getElementById('customerBillingResult');
+
+	renderCustomerConsignments(currentUser.id);
+
+	form.addEventListener('submit', (event) => {
+		event.preventDefault();
+		clearInlineErrors(form);
+
+		const receiverNameInput = document.getElementById('customerReceiverName');
+		const receiverAddressInput = document.getElementById('customerReceiverAddress');
+		const destinationSelect = document.getElementById('customerDestination');
+		const volumeInput = document.getElementById('customerVolume');
+
+		const receiverName = receiverNameInput.value.trim();
+		const receiverAddress = receiverAddressInput.value.trim();
+		const destination = destinationSelect.value.trim();
+		const volume = Number(volumeInput.value);
+
+		let hasError = false;
+
+		if (!receiverName) {
+			setInlineError(receiverNameInput, 'Receiver Name is required.');
+			hasError = true;
+		} else if (receiverName.length < 2) {
+			setInlineError(receiverNameInput, 'Receiver Name must be at least 2 characters.');
+			hasError = true;
+		}
+
+		if (!receiverAddress) {
+			setInlineError(receiverAddressInput, 'Receiver Address is required.');
+			hasError = true;
+		} else if (receiverAddress.length < 5) {
+			setInlineError(receiverAddressInput, 'Receiver Address must be at least 5 characters.');
+			hasError = true;
+		}
+
+		if (!destination) {
+			setInlineError(destinationSelect, 'Please select a destination county.');
+			hasError = true;
+		}
+
+		if (volumeInput.value === '') {
+			setInlineError(volumeInput, 'Volume is required.');
+			hasError = true;
+		} else if (isNaN(volume) || volume <= 0) {
+			setInlineError(volumeInput, 'Volume must be greater than 0.');
+			hasError = true;
+		}
+
+		if (hasError) {
+			showMessage(messageBox, 'Please fix the errors below.', 'error');
+			return;
+		}
+
+		const rate = getRateForDestination(destination);
+		const cost = volume * rate;
+
+		const consignments = getConsignments();
+		consignments.push({
+			id: generateConsignmentId(),
+			senderName: currentUser.fullName,
+			senderAddress: 'Customer Provided',
+			receiverName,
+			receiverAddress,
+			destination,
+			volume,
+			cost,
+			status: 'Pending',
+			createdByUserId: currentUser.id,
+			createdAt: new Date().toISOString()
+		});
+
+		saveConsignments(consignments);
+		refreshDispatchAssignments();
+
+		showMessage(messageBox, 'Consignment submitted successfully for review.', 'success');
+		if (billingResult) {
+			billingResult.textContent = `Estimated Billing: ${volume.toFixed(2)} m³ × GHS ${rate.toFixed(2)} = ${formatCurrency(cost)}`;
+		}
+
+		form.reset();
+		renderCustomerConsignments(currentUser.id);
+	});
+}
+
+function renderCustomerConsignments(userId) {
+	const tbody = document.getElementById('customerConsignmentsBody');
+	if (!tbody) return;
+
+	const consignments = getConsignments().filter(c => c.createdByUserId === userId);
+	tbody.innerHTML = '';
+
+	if (consignments.length === 0) {
+		tbody.innerHTML = '<tr><td colspan="5">You have no consignments yet.</td></tr>';
+		return;
+	}
+
+	consignments.forEach(c => {
+		const row = document.createElement('tr');
+		row.innerHTML = `
+			<td>${c.id}</td>
+			<td>${c.receiverName}</td>
+			<td>${c.destination}</td>
+			<td>${c.volume.toFixed(2)} m³</td>
+			<td><span class="status-pill ${statusClass(c.status)}">${c.status}</span></td>
+		`;
+		tbody.appendChild(row);
+	});
 }
 
 // Map status value to status badge class.
