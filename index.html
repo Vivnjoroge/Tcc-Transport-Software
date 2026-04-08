@@ -10,10 +10,9 @@
   <main class="auth-container">
     <section class="auth-visual" aria-label="Transport illustration">
       <div class="auth-brand-mark">
-        <img src="assets/tcc-logo.svg" alt="TCC logo" class="auth-logo" />
         <div>
-          <p class="brand-kicker">TCC System</p>
-          <h2>Manage your fleet with confidence</h2>
+          <p class="brand-kicker">TCC Logistics</p>
+          <h2>Streamline Your Fleet Management</h2>
         </div>
       </div>
       <img
@@ -21,24 +20,22 @@
         alt="Illustration of buses and logistics transport"
         class="auth-transport-img"
       />
-      <p class="auth-visual-note">Track vehicles, staff, routes, and reports from one place.</p>
+      <p class="auth-visual-note">Join thousands of operators managing arrivals, staff, and reports in real-time.</p>
     </section>
 
     <section class="auth-card">
       <div class="auth-card-logo-row">
-        <img src="assets/tcc-logo.svg" alt="TCC logo" class="auth-logo" />
-        <span>TCC</span>
+        <span>TCC System</span>
       </div>
-      <h1>Login</h1>
-      <p class="auth-subtitle">Transport Company Computerization (TCC) System</p>
+      <h1>Welcome Back</h1>
+      <p class="auth-subtitle">Sign in to your account</p>
 
-      <!-- Status messages are shown here by JavaScript -->
       <div id="loginMessage" class="message" role="alert" aria-live="polite"></div>
 
       <form id="loginForm" novalidate>
         <div class="form-group">
-          <label for="loginEmail">Email</label>
-          <input type="email" id="loginEmail" name="loginEmail" placeholder="Enter email" />
+          <label for="loginEmail">Email Address</label>
+          <input type="email" id="loginEmail" name="loginEmail" placeholder="name@company.com" required />
         </div>
 
         <div class="form-group">
@@ -47,19 +44,20 @@
             type="password"
             id="loginPassword"
             name="loginPassword"
-            placeholder="Enter password"
+            placeholder="••••••••"
+            required
           />
         </div>
 
-        <button type="submit" class="btn-primary">Login</button>
+        <button type="submit" class="btn-primary">Sign In</button>
       </form>
 
-      <p class="auth-note muted">
-        Default Manager login: admin@tcc.com / admin123
-      </p>
+      <div class="auth-note muted">
+        <p><strong>Manager Access:</strong> Use <strong>admin@tcc.com</strong> / <strong>admin123</strong> to explore administrative features.</p>
+      </div>
 
       <p class="auth-note">
-        Don't have an account? <a href="signup.html">Sign up here</a>
+        Don't have an account? <a href="signup.html">Create an account</a>
       </p>
     </section>
   </main>

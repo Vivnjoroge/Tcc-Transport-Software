@@ -9,9 +9,9 @@ const MANAGED_ROLES = ['Clerk', 'Driver', 'Customer'];
 
 // Default Trucks config
 const DEFAULT_TRUCKS = [
-	{ id: 1, truckNumber: 'T-101', status: 'Available', currentLocation: 'Accra', lastAssignedAt: null },
-	{ id: 2, truckNumber: 'T-102', status: 'Available', currentLocation: 'Accra', lastAssignedAt: null },
-	{ id: 3, truckNumber: 'T-103', status: 'Available', currentLocation: 'Accra', lastAssignedAt: null }
+	{ id: 1, truckNumber: 'T-101', status: 'Available', currentLocation: 'Nairobi', lastAssignedAt: '4/8/2026, 5:00:00 AM' },
+	{ id: 2, truckNumber: 'T-102', status: 'Available', currentLocation: 'Mombasa', lastAssignedAt: null },
+	{ id: 3, truckNumber: 'T-103', status: 'Available', currentLocation: 'Kisumu', lastAssignedAt: null }
 ];
 
 // Default Manager account required by the system.
@@ -89,7 +89,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // helper to ensure trucks exist
 function ensureDefaultTrucks() {
-	if (!localStorage.getItem(TRUCKS_STORAGE_KEY)) {
+	// For testing/UI updates, we always reset the trucks if they contain old data
+	const currentTrucks = JSON.parse(localStorage.getItem(TRUCKS_STORAGE_KEY) || '[]');
+	const hasOldData = currentTrucks.some(t => t.currentLocation === 'Accra');
+	
+	if (!localStorage.getItem(TRUCKS_STORAGE_KEY) || hasOldData) {
 		localStorage.setItem(TRUCKS_STORAGE_KEY, JSON.stringify(DEFAULT_TRUCKS));
 	}
 }
@@ -113,6 +117,33 @@ function saveTrucks(trucks) {
 	localStorage.setItem(TRUCKS_STORAGE_KEY, JSON.stringify(trucks));
 }
 
+// helper to update UI elements with state
+function setButtonLoading(button, isLoading, originalText = 'Sign In') {
+	if (!button) return;
+	if (isLoading) {
+		button.disabled = true;
+		button.innerHTML = '<span class="loading-spinner"></span> Please wait...';
+	} else {
+		button.disabled = false;
+		button.innerHTML = originalText;
+	}
+}
+
+// Redirect to login if user is not authorized or has wrong role
+function checkAccess(allowedRoles = []) {
+	const currentUser = getCurrentUser();
+	if (!currentUser) {
+		window.location.href = 'index.html';
+		return null;
+	}
+	if (allowedRoles.length > 0 && !allowedRoles.includes(currentUser.role)) {
+		alert('Unauthorized access. Redirecting...');
+		window.location.href = 'index.html';
+		return null;
+	}
+	return currentUser;
+}
+
 // Initialize login behavior.
 function initLoginPage() {
 	const loginForm = document.getElementById('loginForm');
@@ -122,6 +153,7 @@ function initLoginPage() {
 	}
 
 	const messageBox = document.getElementById('loginMessage');
+	const submitBtn = loginForm.querySelector('button[type="submit"]');
 
 	loginForm.addEventListener('submit', (event) => {
 		event.preventDefault();
@@ -149,31 +181,31 @@ function initLoginPage() {
 			return;
 		}
 
-		if (password.length < 6) {
-			setInlineError(document.getElementById('loginPassword'), 'Password must be at least 6 characters.');
-			showMessage(messageBox, 'Password must be at least 6 characters.', 'error');
-			return;
-		}
-
-		const users = getUsers();
-		const matchedUser = users.find((user) => user.email === email && user.password === password);
-
-		if (!matchedUser) {
-			showMessage(messageBox, 'Invalid email or password.', 'error');
-			return;
-		}
-
-		localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify({
-			id: matchedUser.id,
-			fullName: matchedUser.fullName,
-			email: matchedUser.email,
-			role: matchedUser.role
-		}));
-
-		showMessage(messageBox, 'Login successful. Redirecting to dashboard...', 'success');
+		// Loading state
+		setButtonLoading(submitBtn, true, 'Sign In');
 
 		setTimeout(() => {
-			window.location.href = 'dashboard.html';
+			const users = getUsers();
+			const matchedUser = users.find((user) => user.email === email && user.password === password);
+
+			if (!matchedUser) {
+				setButtonLoading(submitBtn, false, 'Sign In');
+				showMessage(messageBox, 'Invalid email or password.', 'error');
+				return;
+			}
+
+			localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify({
+				id: matchedUser.id,
+				fullName: matchedUser.fullName,
+				email: matchedUser.email,
+				role: matchedUser.role
+			}));
+
+			showMessage(messageBox, 'Login successful. Redirecting...', 'success');
+
+			setTimeout(() => {
+				window.location.href = 'dashboard.html';
+			}, 800);
 		}, 600);
 	});
 }
@@ -189,6 +221,7 @@ function initSignupPage() {
 	}
 
 	const messageBox = document.getElementById('signupMessage');
+	const submitBtn = signupForm.querySelector('button[type="submit"]');
 
 	signupForm.addEventListener('submit', (event) => {
 		event.preventDefault();
@@ -204,11 +237,7 @@ function initSignupPage() {
 		if (!fullName) {
 			setInlineError(document.getElementById('signupFullName'), 'Full Name is required.');
 			hasError = true;
-		} else if (!isValidName(fullName)) {
-			setInlineError(document.getElementById('signupFullName'), 'Enter a valid full name (letters and spaces only).');
-			hasError = true;
 		}
-
 		if (!email) {
 			setInlineError(document.getElementById('signupEmail'), 'Email is required.');
 			hasError = true;
@@ -216,7 +245,6 @@ function initSignupPage() {
 			setInlineError(document.getElementById('signupEmail'), 'Enter a valid email address.');
 			hasError = true;
 		}
-
 		if (!password) {
 			setInlineError(document.getElementById('signupPassword'), 'Password is required.');
 			hasError = true;
@@ -224,46 +252,42 @@ function initSignupPage() {
 			setInlineError(document.getElementById('signupPassword'), 'Password must be at least 6 characters.');
 			hasError = true;
 		}
-
-		if (!confirmPassword) {
-			setInlineError(document.getElementById('signupConfirmPassword'), 'Please confirm your password.');
-			hasError = true;
-		} else if (password !== confirmPassword) {
+		if (password !== confirmPassword) {
 			setInlineError(document.getElementById('signupConfirmPassword'), 'Passwords do not match.');
 			hasError = true;
 		}
 
 		if (hasError) {
-			showMessage(messageBox, 'Please fix the errors below.', 'error');
+			showMessage(messageBox, 'Please correct the errors above.', 'error');
 			return;
 		}
 
 		const users = getUsers();
-		const userExists = users.some((user) => user.email === email);
-
-		if (userExists) {
-			setInlineError(document.getElementById('signupEmail'), 'Email is already registered.');
-			showMessage(messageBox, 'This email is already registered.', 'error');
+		if (users.some((u) => u.email === email)) {
+			showMessage(messageBox, 'An account with this email already exists.', 'error');
 			return;
 		}
 
-		const newUser = {
-			id: Date.now(),
-			fullName,
-			email,
-			password,
-			role: 'Customer',
-			createdAt: new Date().toISOString()
-		};
-
-		users.push(newUser);
-		saveUsers(users);
-
-		showMessage(messageBox, 'Registration successful. You can now login.', 'success');
+		setButtonLoading(submitBtn, true, 'Create Account');
 
 		setTimeout(() => {
-			window.location.href = 'index.html';
-		}, 1500);
+			const newUser = {
+				id: 'u' + Date.now(),
+				fullName,
+				email,
+				password,
+				role: 'Customer' // Default role for manual signup
+			};
+
+			users.push(newUser);
+			saveUsers(users);
+
+			showMessage(messageBox, 'Account created! Redirecting to sign in...', 'success');
+
+			setTimeout(() => {
+				window.location.href = 'index.html';
+			}, 1500);
+		}, 800);
 	});
 }
 
@@ -275,11 +299,8 @@ function initDashboardPage() {
 		return;
 	}
 
-	const currentUser = getCurrentUser();
-	if (!currentUser) {
-		window.location.href = 'index.html';
-		return;
-	}
+	const currentUser = checkAccess();
+	if (!currentUser) return;
 
 	initProfileManagement(currentUser);
 
@@ -826,6 +847,7 @@ function exportManagerReportPdf() {
 
 // Initialize Manager-only user management features.
 function initManagerUserManagement() {
+	if (!checkAccess(['Manager'])) return;
 	const manageUserForm = document.getElementById('manageUserForm');
 	const managedUsersBody = document.getElementById('managedUsersBody');
 	const roleInput = document.getElementById('managedRole');
@@ -937,7 +959,7 @@ function initManagerUserManagement() {
 				createdAt: new Date().toISOString()
 			});
 
-			showMessage(messageBox, 'User added successfully.', 'success');
+			showMessage(messageBox, `${role} account created successfully.`, 'success');
 		}
 
 		saveUsers(users);
@@ -1062,6 +1084,7 @@ function deleteManagedUser(userId, messageBox) {
 
 // Initialize Clerk dashboard features.
 function initClerkDashboard(currentUser) {
+	if (!checkAccess(['Clerk', 'Manager'])) return;
 	const form = document.getElementById('clerkConsignmentForm');
 	if (!form) {
 		return;
@@ -1302,6 +1325,45 @@ function getClerkFilteredConsignments(consignments) {
 }
 
 // Render consignments table for Clerk view.
+function handleClerkAction(action, id) {
+	const consignments = getConsignments();
+	const item = consignments.find(c => c.id === id);
+	const trucks = getTrucks();
+	const users = getUsers();
+	
+	if (!item) return;
+
+	if (action === 'approve') {
+		item.status = 'Approved';
+	} else if (action === 'reject') {
+		item.status = 'Rejected';
+	} else if (action === 'dispatch') {
+		// Pick an available driver and truck
+		const drivers = users.filter(u => u.role === 'Driver');
+		const availableTrucks = trucks.filter(t => t.status === 'Available');
+
+		if (drivers.length === 0 || availableTrucks.length === 0) {
+			alert('Cannot dispatch: No available drivers or trucks.');
+			return;
+		}
+
+		const driver = drivers[0]; 
+		const truck = availableTrucks[0];
+
+		item.status = 'In Transit';
+		item.assignedDriverId = driver.id;
+		item.assignedDriverName = driver.fullName;
+		item.assignedTruckId = truck.id;
+		item.assignedTruckNumber = truck.truckNumber;
+		
+		truck.status = 'On Delivery';
+		saveTrucks(trucks);
+	}
+
+	saveConsignments(consignments);
+	renderClerkConsignmentsTable();
+}
+
 function renderClerkConsignmentsTable() {
 	const tbody = document.getElementById('clerkConsignmentsBody');
 	const dispatchSummary = document.getElementById('clerkDispatchSummary');
@@ -1347,18 +1409,34 @@ function renderClerkConsignmentsTable() {
 
 	filteredConsignments.forEach((consignment) => {
 		const row = document.createElement('tr');
+		
+		let actionBtns = '';
+		if (consignment.status === 'Pending') {
+			actionBtns = `
+				<button class="btn-small success" data-action="approve" data-id="${consignment.id}">Approve</button>
+				<button class="btn-small error" data-action="reject" data-id="${consignment.id}">Reject</button>
+			`;
+		} else if (consignment.status === 'Approved') {
+			actionBtns = `<button class="btn-small" data-action="dispatch" data-id="${consignment.id}">Dispatch</button>`;
+		}
+
 		row.innerHTML = `
 			<td>${consignment.id}</td>
 			<td>${consignment.senderName}</td>
-			<td>${consignment.receiverName}</td>
 			<td>${consignment.destination}</td>
 			<td>${Number(consignment.volume).toFixed(2)} m³</td>
 			<td>${formatCurrency(Number(consignment.cost) || 0)}</td>
 			<td><span class="status-pill ${statusClass(consignment.status)}">${consignment.status}</span></td>
 			<td>${consignment.assignedDriverName || '-'}</td>
+			<td class="table-actions">${actionBtns}</td>
 		`;
 
 		tbody.appendChild(row);
+	});
+
+	// Attach action listeners
+	tbody.querySelectorAll('button[data-action]').forEach(btn => {
+		btn.onclick = () => handleClerkAction(btn.dataset.action, btn.dataset.id);
 	});
 
 	if (dispatchSummary) {
@@ -1370,6 +1448,7 @@ function renderClerkConsignmentsTable() {
 
 // Initialize Driver dashboard features.
 function initDriverDashboard(currentUser) {
+	if (!checkAccess(['Driver', 'Manager'])) return;
 	renderDriverAssignments(currentUser.id);
 
 	const assignmentsBody = document.getElementById('driverAssignmentsBody');
@@ -1811,6 +1890,7 @@ function generateConsignmentId() {
 }
 
 function initCustomerDashboard(currentUser) {
+	if (!checkAccess(['Customer', 'Manager'])) return;
 	const form = document.getElementById('customerConsignmentForm');
 	if (!form) return;
 
@@ -1888,9 +1968,10 @@ function initCustomerDashboard(currentUser) {
 		});
 
 		saveConsignments(consignments);
-		refreshDispatchAssignments();
+		// Update dispatch assignments logic removed from here as Clerk now handles assignment
+		// refreshDispatchAssignments(); 
 
-		showMessage(messageBox, 'Consignment submitted successfully for review.', 'success');
+		showMessage(messageBox, 'Consignment submitted successfully. A Clerk will review and assign a driver shortly.', 'success');
 		if (billingResult) {
 			billingResult.textContent = `Estimated Billing: ${volume.toFixed(2)} m³ × GHS ${rate.toFixed(2)} = ${formatCurrency(cost)}`;
 		}

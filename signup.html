@@ -8,41 +8,39 @@
 </head>
 <body class="auth-page">
   <main class="auth-container">
-    <section class="auth-visual" aria-label="Transport illustration">
+    <section class="auth-visual" aria-label="Signup illustration">
       <div class="auth-brand-mark">
-        <img src="assets/tcc-logo.svg" alt="TCC logo" class="auth-logo" />
         <div>
-          <p class="brand-kicker">TCC System</p>
-          <h2>Join our logistics network</h2>
+          <p class="brand-kicker">Join TCC Logistics</p>
+          <h2>Start Managing Your Operations</h2>
         </div>
       </div>
       <img
         src="assets/transport-illustration.svg"
-        alt="Illustration of buses and logistics transport"
+        alt="Logistics network illustration"
         class="auth-transport-img"
       />
-      <p class="auth-visual-note">Submit consignments and track your shipments with ease.</p>
+      <p class="auth-visual-note">Get started with a free customer account and track your shipments instantly.</p>
     </section>
 
     <section class="auth-card">
       <div class="auth-card-logo-row">
-        <img src="assets/tcc-logo.svg" alt="TCC logo" class="auth-logo" />
-        <span>TCC</span>
+        <span>TCC Logistics</span>
       </div>
-      <h1>Customer Signup</h1>
-      <p class="auth-subtitle">Create your account to start shipping</p>
+      <h1>Create Account</h1>
+      <p class="auth-subtitle">Join our transportation network as a customer</p>
 
       <div id="signupMessage" class="message" role="alert" aria-live="polite"></div>
 
       <form id="signupForm" novalidate>
         <div class="form-group">
           <label for="signupFullName">Full Name</label>
-          <input type="text" id="signupFullName" name="signupFullName" placeholder="Enter your full name" />
+          <input type="text" id="signupFullName" name="signupFullName" placeholder="e.g. John Doe" required />
         </div>
 
         <div class="form-group">
-          <label for="signupEmail">Email</label>
-          <input type="email" id="signupEmail" name="signupEmail" placeholder="Enter email" />
+          <label for="signupEmail">Work Email</label>
+          <input type="email" id="signupEmail" name="signupEmail" placeholder="name@example.com" required />
         </div>
 
         <div class="form-group">
@@ -51,7 +49,8 @@
             type="password"
             id="signupPassword"
             name="signupPassword"
-            placeholder="Create a password"
+            placeholder="Min. 6 characters"
+            required
           />
         </div>
 
@@ -61,15 +60,16 @@
             type="password"
             id="signupConfirmPassword"
             name="signupConfirmPassword"
-            placeholder="Confirm your password"
+            placeholder="Repeat password"
+            required
           />
         </div>
 
-        <button type="submit" class="btn-primary">Sign Up</button>
+        <button type="submit" class="btn-primary">Create Account</button>
       </form>
 
       <p class="auth-note">
-        Already have an account? <a href="index.html">Login here</a>
+        Already have an account? <a href="index.html">Sign in here</a>
       </p>
     </section>
   </main>
