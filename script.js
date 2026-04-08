@@ -5,11 +5,11 @@ const CONSIGNMENTS_STORAGE_KEY = 'tcc_consignments';
 const TRUCKS_STORAGE_KEY = 'tcc_trucks';
 const TRUCK_LOGS_STORAGE_KEY = 'tcc_truck_logs';
 
-const MANAGED_ROLES = ['Clerk', 'Driver', 'Customer'];
+const MANAGED_ROLES = ['Clerk', 'Driver', 'Customer', 'Manager'];
 
 // Default Trucks config
 const DEFAULT_TRUCKS = [
-	{ id: 1, truckNumber: 'T-101', status: 'Available', currentLocation: 'Nairobi', lastAssignedAt: '4/8/2026, 5:00:00 AM' },
+	{ id: 1, truckNumber: 'T-101', status: 'Available', currentLocation: 'Nairobi', lastAssignedAt: null },
 	{ id: 2, truckNumber: 'T-102', status: 'Available', currentLocation: 'Mombasa', lastAssignedAt: null },
 	{ id: 3, truckNumber: 'T-103', status: 'Available', currentLocation: 'Kisumu', lastAssignedAt: null }
 ];
@@ -324,8 +324,19 @@ function initDashboardPage() {
 		});
 	}
 
-	// Recalculate dispatch status and assignment each time dashboard loads.
-	refreshDispatchAssignments();
+	// Real-time updates simulation - check for new consignments every 10 seconds
+	setInterval(() => {
+		if (currentUser.role === 'Clerk') {
+			renderClerkConsignmentsTable();
+		} else if (currentUser.role === 'Manager') {
+			renderManagerDashboard();
+		} else if (currentUser.role === 'Driver') {
+			renderDriverAssignments(currentUser.id);
+		} else if (currentUser.role === 'Customer') {
+			renderCustomerConsignments(currentUser.id);
+		}
+	}, 10000);
+
 	applyRoleVisibility(currentUser.role);
 
 	if (currentUser.role === 'Manager') {
@@ -1099,8 +1110,10 @@ function initClerkDashboard(currentUser) {
 	const assignedDriverSelect = document.getElementById('assignedDriverId');
 	const saveButton = form.querySelector('button[type="submit"]');
 
-	populateClerkDriverSelect();
-	updateClerkDriverAvailabilityState(assignedDriverSelect, saveButton);
+	// Note: Auto-assignment is removed, Clerk manually reviews.
+	if (assignedDriverSelect) {
+		assignedDriverSelect.closest('.form-group').style.display = 'none';
+	}
 
 	if (applyFiltersBtn) {
 		applyFiltersBtn.addEventListener('click', () => {
@@ -1154,8 +1167,6 @@ function initClerkDashboard(currentUser) {
 		const receiverAddress = receiverAddressInput.value.trim();
 		const destination = destinationSelect.value.trim();
 		const volume = Number(volumeInput.value);
-		const selectedDriverId = assignedDriverSelect ? Number(assignedDriverSelect.value) : 0;
-		const selectedDriver = getUsers().find((user) => user.role === 'Driver' && Number(user.id) === selectedDriverId);
 
 		let hasError = false;
 
@@ -1204,11 +1215,6 @@ function initClerkDashboard(currentUser) {
 			hasError = true;
 		}
 
-		if (!selectedDriverId) {
-			setInlineError(assignedDriverSelect, 'Please assign a driver.');
-			hasError = true;
-		}
-
 		if (hasError) {
 			showMessage(messageBox, 'Please fix the errors below.', 'error');
 			return;
@@ -1228,24 +1234,19 @@ function initClerkDashboard(currentUser) {
 			volume,
 			cost,
 			status: 'Pending',
-			assignedDriverId: selectedDriver.id,
-			assignedDriverName: selectedDriver.fullName,
 			createdByUserId: currentUser.id,
 			createdAt: new Date().toISOString()
 		});
 
 		saveConsignments(consignments);
-		refreshDispatchAssignments();
 
 		showMessage(messageBox, 'Consignment saved successfully.', 'success');
 		if (billingResult) {
-			billingResult.textContent = `Billing: ${volume.toFixed(2)} m³ × GHS ${rate.toFixed(2)} = ${formatCurrency(cost)}`;
+			billingResult.textContent = `Billing: ${volume.toFixed(2)} m³ × KSh ${rate.toFixed(2)} = ${formatCurrency(cost)}`;
 		}
 
 		form.reset();
 		clearInlineErrors(form);
-		populateClerkDriverSelect();
-		updateClerkDriverAvailabilityState(assignedDriverSelect, saveButton);
 		renderClerkConsignmentsTable();
 	});
 }
@@ -1338,26 +1339,40 @@ function handleClerkAction(action, id) {
 	} else if (action === 'reject') {
 		item.status = 'Rejected';
 	} else if (action === 'dispatch') {
-		// Pick an available driver and truck
+		const destination = item.destination;
+		const availableTruck = trucks.find(t => t.status === 'Available');
 		const drivers = users.filter(u => u.role === 'Driver');
-		const availableTrucks = trucks.filter(t => t.status === 'Available');
+		const availableDriver = drivers.find(u => !consignments.some(c => c.assignedDriverId === u.id && c.status === 'In Transit'));
 
-		if (drivers.length === 0 || availableTrucks.length === 0) {
-			alert('Cannot dispatch: No available drivers or trucks.');
-			return;
+		if (!availableTruck || !availableDriver) {
+			item.status = 'Ready for Dispatch';
+			const reason = !availableTruck ? 'No available truck' : 'No available driver';
+			alert(`${reason}. Consignment marked as "Ready for Dispatch".`);
+		} else {
+			const dispatchTime = new Date().toISOString();
+			item.status = 'In Transit';
+			item.assignedDriverId = availableDriver.id;
+			item.assignedDriverName = availableDriver.fullName;
+			item.assignedTruckId = availableTruck.id;
+			item.assignedTruckNumber = availableTruck.truckNumber;
+			item.dispatchedAt = dispatchTime;
+
+			availableTruck.status = 'Busy';
+			availableTruck.lastAssignedAt = dispatchTime;
+			
+			const logs = getTruckLogs();
+			logs.push({
+				id: Date.now(),
+				truckId: availableTruck.id,
+				truckNumber: availableTruck.truckNumber,
+				destination: destination,
+				consignmentIds: [item.id],
+				dispatchedAt: dispatchTime,
+				totalVolume: item.volume
+			});
+			saveTruckLogs(logs);
+			saveTrucks(trucks);
 		}
-
-		const driver = drivers[0]; 
-		const truck = availableTrucks[0];
-
-		item.status = 'In Transit';
-		item.assignedDriverId = driver.id;
-		item.assignedDriverName = driver.fullName;
-		item.assignedTruckId = truck.id;
-		item.assignedTruckNumber = truck.truckNumber;
-		
-		truck.status = 'On Delivery';
-		saveTrucks(trucks);
 	}
 
 	saveConsignments(consignments);
@@ -1575,10 +1590,10 @@ function refreshDispatchAssignments() {
 	const logs = getTruckLogs();
 	const drivers = getUsers().filter((user) => user.role === 'Driver');
 
-	const activeConsignments = consignments.filter((item) => (item.status === 'Pending' || item.status === 'Ready for Dispatch'));
+	const readyConsignments = consignments.filter((item) => item.status === 'Ready for Dispatch');
 	const destinationGroups = new Map();
 
-	activeConsignments.forEach((consignment) => {
+	readyConsignments.forEach((consignment) => {
 		const destination = (consignment.destination || 'Unknown').trim();
 		const destinationKey = destination.toLowerCase();
 
@@ -1598,59 +1613,38 @@ function refreshDispatchAssignments() {
 	let changed = false;
 
 	destinationGroups.forEach((group) => {
-		const destinationKey = group.destination.toLowerCase();
-		
-		// Requirement: When volume becomes 500, allot the next available truck.
-		if (group.totalVolume >= VOLUME_THRESHOLD) {
-			const pendingItems = group.items.filter(i => i.status === 'Pending');
+		// Auto-allotment if destination reaches volume threshold
+		const availableTruck = trucks.find(t => t.status === 'Available');
+		const availableDriver = drivers.find(u => !consignments.some(c => c.assignedDriverId === u.id && c.status === 'In Transit'));
+
+		if (availableTruck && availableDriver && group.totalVolume >= VOLUME_THRESHOLD) {
+			const dispatchTime = new Date().toISOString();
+			const consignmentNumbers = [];
+
+			group.items.forEach((consignment) => {
+				consignment.status = 'In Transit';
+				consignment.assignedTruckId = availableTruck.id;
+				consignment.assignedTruckNumber = availableTruck.truckNumber;
+				consignment.assignedDriverId = availableDriver.id;
+				consignment.assignedDriverName = availableDriver.fullName;
+				consignment.dispatchedAt = dispatchTime;
+				consignmentNumbers.push(consignment.id);
+			});
+
+			availableTruck.status = 'Busy';
+			availableTruck.lastAssignedAt = dispatchTime;
 			
-			if (pendingItems.length > 0) {
-				// Find available truck
-				const availableTruck = trucks.find(t => t.status === 'Available');
-				const availableDriver = drivers[0]; // Simplification for allotment
+			logs.push({
+				id: Date.now(),
+				truckId: availableTruck.id,
+				truckNumber: availableTruck.truckNumber,
+				destination: group.destination,
+				consignmentIds: consignmentNumbers,
+				dispatchedAt: dispatchTime,
+				totalVolume: group.totalVolume
+			});
 
-				if (availableTruck) {
-					availableTruck.status = 'Busy';
-					availableTruck.lastAssignedAt = new Date().toISOString();
-					
-					const dispatchTime = new Date().toISOString();
-					const consignmentNumbers = [];
-
-					group.items.forEach((consignment) => {
-						consignment.status = 'In Transit';
-						consignment.assignedTruckId = availableTruck.id;
-						consignment.dispatchedAt = dispatchTime;
-						consignmentNumber = consignment.id;
-						consignmentNumbers.push(consignment.id);
-						
-						if (availableDriver) {
-							consignment.assignedDriverId = availableDriver.id;
-							consignment.assignedDriverName = availableDriver.fullName;
-						}
-					});
-
-					// Create usage log
-					logs.push({
-						id: Date.now(),
-						truckId: availableTruck.id,
-						truckNumber: availableTruck.truckNumber,
-						destination: group.destination,
-						consignmentIds: consignmentNumbers,
-						dispatchedAt: dispatchTime,
-						totalVolume: group.totalVolume
-					});
-
-					changed = true;
-				} else {
-					// No truck available, mark as 'Ready for Dispatch'
-					group.items.forEach(c => {
-						if (c.status === 'Pending') {
-							c.status = 'Ready for Dispatch';
-							changed = true;
-						}
-					});
-				}
-			}
+			changed = true;
 		}
 	});
 
@@ -1973,7 +1967,7 @@ function initCustomerDashboard(currentUser) {
 
 		showMessage(messageBox, 'Consignment submitted successfully. A Clerk will review and assign a driver shortly.', 'success');
 		if (billingResult) {
-			billingResult.textContent = `Estimated Billing: ${volume.toFixed(2)} m³ × GHS ${rate.toFixed(2)} = ${formatCurrency(cost)}`;
+			billingResult.textContent = `Estimated Billing: ${volume.toFixed(2)} m³ × KSh ${rate.toFixed(2)} = ${formatCurrency(cost)}`;
 		}
 
 		form.reset();
@@ -2021,7 +2015,7 @@ function statusClass(status) {
 
 // Format currency values.
 function formatCurrency(amount) {
-	return `GHS ${Number(amount).toFixed(2)}`;
+	return `KSh ${Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 // Validate email format.
