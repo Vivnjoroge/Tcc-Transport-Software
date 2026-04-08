@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TCC System - Dashboard</title>
   <link rel="stylesheet" href="style.css" />
+  <!-- Chart.js for reports -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div class="dashboard-layout">
@@ -150,6 +152,17 @@
             </article>
           </div>
 
+          <div class="charts-grid mt-20">
+            <article class="card chart-container">
+              <h4>Consignment Status Breakdown</h4>
+              <canvas id="statusChart"></canvas>
+            </article>
+            <article class="card chart-container">
+              <h4>Revenue by Destination (KSh)</h4>
+              <canvas id="revenueChart"></canvas>
+            </article>
+          </div>
+
           <div class="action-row report-actions">
             <button id="managerExportCsv" type="button" class="btn-light action-btn">Export CSV</button>
             <button id="managerExportPdf" type="button" class="btn-light action-btn">Export PDF</button>
@@ -205,6 +218,7 @@
               <thead>
                 <tr>
                   <th>Consignment ID</th>
+                  <th>Date</th>
                   <th>Destination</th>
                   <th>Receiver</th>
                   <th>Volume</th>
@@ -383,6 +397,7 @@
               <thead>
                 <tr>
                   <th>ID</th>
+                  <th>Date</th>
                   <th>Sender</th>
                   <th>Destination</th>
                   <th>Volume</th>
@@ -422,6 +437,15 @@
       </section>
 
       <section id="customerSection" class="dashboard-section hidden">
+        <div class="stats-grid notification-summary">
+          <article class="card">
+            <h3>Recent Notifications</h3>
+            <div id="notificationsList" class="notifications-list">
+              <p class="muted-text">No notifications.</p>
+            </div>
+          </article>
+        </div>
+
         <div id="customerSubmission" class="card">
           <h3>Submit New Consignment</h3>
           <div id="customerMessage" class="message" role="alert" aria-live="polite"></div>
@@ -506,6 +530,7 @@
               <thead>
                 <tr>
                   <th>ID</th>
+                  <th>Date</th>
                   <th>Receiver</th>
                   <th>Destination</th>
                   <th>Volume</th>

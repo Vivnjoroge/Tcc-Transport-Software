@@ -2,6 +2,7 @@
 const USERS_STORAGE_KEY = 'tcc_users';
 const CURRENT_USER_STORAGE_KEY = 'tcc_current_user';
 const CONSIGNMENTS_STORAGE_KEY = 'tcc_consignments';
+const NOTIFICATIONS_STORAGE_KEY = 'tcc_notifications';
 const TRUCKS_STORAGE_KEY = 'tcc_trucks';
 const TRUCK_LOGS_STORAGE_KEY = 'tcc_truck_logs';
 
@@ -106,6 +107,29 @@ function getTruckLogs() {
 
 function saveTruckLogs(logs) {
 	localStorage.setItem(TRUCK_LOGS_STORAGE_KEY, JSON.stringify(logs));
+}
+
+// Notification helpers
+function getNotifications() {
+	const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+	return raw ? JSON.parse(raw) : [];
+}
+
+function saveNotifications(notifications) {
+	localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(notifications));
+}
+
+function addNotification(userId, title, message) {
+	const notifications = getNotifications();
+	notifications.push({
+		id: Date.now(),
+		userId: userId,
+		title: title,
+		message: message,
+		timestamp: new Date().toISOString(),
+		read: false
+	});
+	saveNotifications(notifications);
 }
 
 function getTrucks() {
@@ -237,6 +261,9 @@ function initSignupPage() {
 		if (!fullName) {
 			setInlineError(document.getElementById('signupFullName'), 'Full Name is required.');
 			hasError = true;
+		} else if (!isValidName(fullName)) {
+			setInlineError(document.getElementById('signupFullName'), 'Full Name should only contain letters and be at least 2 characters long.');
+			hasError = true;
 		}
 		if (!email) {
 			setInlineError(document.getElementById('signupEmail'), 'Email is required.');
@@ -334,6 +361,7 @@ function initDashboardPage() {
 			renderDriverAssignments(currentUser.id);
 		} else if (currentUser.role === 'Customer') {
 			renderCustomerConsignments(currentUser.id);
+			renderCustomerNotifications(currentUser.id);
 		}
 	}, 10000);
 
@@ -539,15 +567,22 @@ function initProfileManagement(currentUser) {
 		if (!newFullName) {
 			setInlineError(fullNameInput, 'Full Name is required.');
 			hasError = true;
-		}
-
-		if (newPassword && newPassword.length < 6) {
-			setInlineError(passwordInput, 'Password must be at least 6 characters.');
+		} else if (!isValidName(newFullName)) {
+			setInlineError(fullNameInput, 'Full Name must be at least 2 characters and contain only letters.');
 			hasError = true;
 		}
 
-		if (newPassword !== confirmPassword) {
-			setInlineError(confirmPasswordInput, 'Passwords do not match.');
+		if (newPassword) {
+			if (newPassword.length < 6) {
+				setInlineError(passwordInput, 'New password must be at least 6 characters.');
+				hasError = true;
+			}
+			if (newPassword !== confirmPassword) {
+				setInlineError(confirmPasswordInput, 'Passwords do not match.');
+				hasError = true;
+			}
+		} else if (confirmPassword) {
+			setInlineError(confirmPasswordInput, 'Please enter a new password first.');
 			hasError = true;
 		}
 
@@ -893,7 +928,6 @@ function initManagerUserManagement() {
 		const email = emailInput.value.trim().toLowerCase();
 		const password = passwordInput.value;
 		const role = roleInput.value;
-		const editingId = Number(managedUserId.value || 0);
 
 		if (!fullName || !email || !password || !role) {
 			if (!fullName) {
@@ -941,15 +975,15 @@ function initManagerUserManagement() {
 		}
 
 		const users = getUsers();
-		const duplicateUser = users.find((user) => user.email === email && user.id !== editingId);
+		const duplicateUser = users.find((user) => user.email === email && String(user.id) !== String(managedUserId.value));
 		if (duplicateUser) {
 			setInlineError(emailInput, 'This email is already in use.');
 			showMessage(messageBox, 'This email is already used by another account.', 'error');
 			return;
 		}
 
-		if (editingId) {
-			const targetUser = users.find((user) => user.id === editingId);
+		if (managedUserId.value) {
+			const targetUser = users.find((user) => String(user.id) === String(managedUserId.value));
 			if (!targetUser) {
 				showMessage(messageBox, 'Selected user was not found.', 'error');
 				return;
@@ -985,23 +1019,36 @@ function initManagerUserManagement() {
 		renderManagerDashboard();
 	});
 
+	cancelEditBtn.addEventListener('click', () => {
+		manageUserForm.reset();
+		managedUserId.value = '';
+		addUserBtn.textContent = 'Add User';
+		cancelEditBtn.hidden = true;
+		clearInlineErrors(manageUserForm);
+		showMessage(messageBox, 'Edit cancelled.', 'info');
+	});
+
 	managedUsersBody.addEventListener('click', (event) => {
 		const clickedElement = event.target;
 		if (!(clickedElement instanceof HTMLElement)) {
 			return;
 		}
 
-		const userIdValue = clickedElement.dataset.userId;
-		if (!userIdValue) {
+		// Find elements with dataset attributes, could be the button or a child if any.
+		const actionBtn = clickedElement.closest('[data-action]');
+		if (!actionBtn) {
 			return;
 		}
 
-		const userId = Number(userIdValue);
-		if (!userId) {
+		const action = actionBtn.dataset.action;
+		const userId = actionBtn.dataset.userId;
+
+		if (!userId || !action) {
 			return;
 		}
 
-		if (clickedElement.dataset.action === 'delete') {
+		if (action === 'delete') {
+			if (!confirm('Are you sure you want to delete this user?')) return;
 			deleteManagedUser(userId, messageBox);
 			refreshDispatchAssignments();
 			renderManagedUsersTable();
@@ -1009,9 +1056,9 @@ function initManagerUserManagement() {
 			return;
 		}
 
-		if (clickedElement.dataset.action === 'edit') {
+		if (action === 'edit') {
 			const users = getUsers();
-			const targetUser = users.find((user) => user.id === userId);
+			const targetUser = users.find((user) => String(user.id) === String(userId));
 
 			if (!targetUser || targetUser.role === 'Manager') {
 				showMessage(messageBox, 'This user cannot be edited here.', 'error');
@@ -1026,6 +1073,9 @@ function initManagerUserManagement() {
 			addUserBtn.textContent = 'Update User';
 			cancelEditBtn.hidden = false;
 			showMessage(messageBox, `Editing user: ${targetUser.fullName}`, 'success');
+
+			// Scroll the form into view if necessary
+			manageUserForm.scrollIntoView({ behavior: 'smooth' });
 		}
 	});
 
@@ -1076,7 +1126,7 @@ function renderManagedUsersTable() {
 // Delete a Clerk/Driver account.
 function deleteManagedUser(userId, messageBox) {
 	const users = getUsers();
-	const targetUser = users.find((user) => user.id === userId);
+	const targetUser = users.find((user) => String(user.id) === String(userId));
 
 	if (!targetUser) {
 		showMessage(messageBox, 'User not found.', 'error');
@@ -1088,7 +1138,7 @@ function deleteManagedUser(userId, messageBox) {
 		return;
 	}
 
-	const filteredUsers = users.filter((user) => user.id !== userId);
+	const filteredUsers = users.filter((user) => String(user.id) !== String(userId));
 	saveUsers(filteredUsers);
 	showMessage(messageBox, 'User deleted successfully.', 'success');
 }
@@ -1347,6 +1397,16 @@ function handleClerkAction(action, id) {
 		if (!availableTruck || !availableDriver) {
 			item.status = 'Ready for Dispatch';
 			const reason = !availableTruck ? 'No available truck' : 'No available driver';
+
+			// Notification for customer
+			if (item.createdByUserId) {
+				addNotification(
+					item.createdByUserId,
+					'Consignment Ready for Dispatch',
+					`Your consignment ${item.id} to ${item.destination} is now ready and waiting for an available truck or driver.`
+				);
+			}
+
 			alert(`${reason}. Consignment marked as "Ready for Dispatch".`);
 		} else {
 			const dispatchTime = new Date().toISOString();
@@ -1370,6 +1430,15 @@ function handleClerkAction(action, id) {
 				dispatchedAt: dispatchTime,
 				totalVolume: item.volume
 			});
+
+			if (item.createdByUserId) {
+				addNotification(
+					item.createdByUserId,
+					'Consignment In Transit',
+					`Your consignment ${item.id} is now in transit with truck ${availableTruck.truckNumber}.`
+				);
+			}
+
 			saveTruckLogs(logs);
 			saveTrucks(trucks);
 		}
@@ -1437,6 +1506,7 @@ function renderClerkConsignmentsTable() {
 
 		row.innerHTML = `
 			<td>${consignment.id}</td>
+			<td>${consignment.createdAt ? new Date(consignment.createdAt).toLocaleDateString() : '-'}</td>
 			<td>${consignment.senderName}</td>
 			<td>${consignment.destination}</td>
 			<td>${Number(consignment.volume).toFixed(2)} m³</td>
@@ -1505,7 +1575,7 @@ function renderDriverAssignments(driverId) {
 	assignmentsBody.innerHTML = '';
 
 	if (assignedConsignments.length === 0) {
-		assignmentsBody.innerHTML = '<tr><td colspan="7">No deliveries assigned yet.</td></tr>';
+		assignmentsBody.innerHTML = '<tr><td colspan="8">No deliveries assigned yet.</td></tr>';
 		return;
 	}
 
@@ -1514,6 +1584,7 @@ function renderDriverAssignments(driverId) {
 		const row = document.createElement('tr');
 		row.innerHTML = `
 			<td>${consignment.id}</td>
+			<td>${consignment.createdAt ? new Date(consignment.createdAt).toLocaleDateString() : '-'}</td>
 			<td>${consignment.senderName}</td>
 			<td>${consignment.receiverName}</td>
 			<td>${consignment.destination}</td>
@@ -1546,6 +1617,15 @@ function markConsignmentAsDelivered(consignmentId, driverId) {
 	const currentTime = new Date().toISOString();
 	consignment.status = 'Delivered';
 	consignment.deliveredAt = currentTime;
+
+	// Notification for customer
+	if (consignment.createdByUserId) {
+		addNotification(
+			consignment.createdByUserId,
+			'Consignment Arrived/Delivered',
+			`Your consignment ${consignment.id} has reached its destination ${consignment.destination} and is marked as Delivered.`
+		);
+	}
 
 	// check if all consignments on that truck are delivered
 	if (consignment.assignedTruckId) {
@@ -1727,12 +1807,13 @@ function renderManagerDashboard() {
 		consignmentTrackingBody.innerHTML = '';
 
 		if (filteredConsignments.length === 0) {
-			consignmentTrackingBody.innerHTML = '<tr><td colspan="6">No consignments matched your filters.</td></tr>';
+			consignmentTrackingBody.innerHTML = '<tr><td colspan="7">No consignments matched your filters.</td></tr>';
 		} else {
 			filteredConsignments.forEach((consignment) => {
 				const row = document.createElement('tr');
 				row.innerHTML = `
 					<td>${consignment.id}</td>
+					<td>${consignment.createdAt ? new Date(consignment.createdAt).toLocaleDateString() : '-'}</td>
 					<td>${consignment.destination || '-'}</td>
 					<td>${consignment.receiverName || '-'}</td>
 					<td>${Number(consignment.volume || 0).toFixed(2)} m³</td>
@@ -1743,6 +1824,88 @@ function renderManagerDashboard() {
 			});
 		}
 	}
+
+	renderCharts(consignments);
+}
+
+// Chart.js instances - track globally to destroy before re-render
+let statusChartInstance = null;
+let revenueChartInstance = null;
+
+function renderCharts(consignments) {
+	const statusCanvas = document.getElementById('statusChart');
+	const revenueCanvas = document.getElementById('revenueChart');
+	
+	if (!statusCanvas || !revenueCanvas || typeof Chart === 'undefined') return;
+
+	// 1. Prepare Data for Status Donut Chart
+	const statusCounts = {
+		'Pending': 0,
+		'Ready for Dispatch': 0,
+		'In Transit': 0,
+		'Delivered': 0,
+		'Rejected': 0
+	};
+	consignments.forEach(c => {
+		if (statusCounts.hasOwnProperty(c.status)) statusCounts[c.status]++;
+	});
+
+	if (statusChartInstance) statusChartInstance.destroy();
+	statusChartInstance = new Chart(statusCanvas, {
+		type: 'doughnut',
+		data: {
+			labels: Object.keys(statusCounts),
+			datasets: [{
+				data: Object.values(statusCounts),
+				backgroundColor: ['#fdba74', '#86efac', '#60a5fa', '#7dd3fc', '#f87171'],
+				borderWidth: 1
+			}]
+		},
+		options: {
+			responsive: true,
+			maintainAspectRatio: false,
+			plugins: {
+				legend: { position: 'bottom' }
+			}
+		}
+	});
+
+	// 2. Prepare Data for Revenue Bar Chart (by County)
+	const revenueByCounty = {};
+	consignments.forEach(c => {
+		if (c.status !== 'Rejected') {
+			const county = c.destination || 'Other';
+			const cost = Number(c.cost) || 0;
+			revenueByCounty[county] = (revenueByCounty[county] || 0) + cost;
+		}
+	});
+
+	const counties = Object.keys(revenueByCounty);
+	const revenues = Object.values(revenueByCounty);
+
+	if (revenueChartInstance) revenueChartInstance.destroy();
+	revenueChartInstance = new Chart(revenueCanvas, {
+		type: 'bar',
+		data: {
+			labels: counties,
+			datasets: [{
+				label: 'Revenue (KSh)',
+				data: revenues,
+				backgroundColor: '#2563eb',
+				borderRadius: 6
+			}]
+		},
+		options: {
+			responsive: true,
+			maintainAspectRatio: false,
+			scales: {
+				y: { beginAtZero: true }
+			},
+			plugins: {
+				legend: { display: false }
+			}
+		}
+	});
 }
 
 // Requirement logic helper
@@ -1892,6 +2055,7 @@ function initCustomerDashboard(currentUser) {
 	const billingResult = document.getElementById('customerBillingResult');
 
 	renderCustomerConsignments(currentUser.id);
+	renderCustomerNotifications(currentUser.id);
 
 	form.addEventListener('submit', (event) => {
 		event.preventDefault();
@@ -1972,7 +2136,42 @@ function initCustomerDashboard(currentUser) {
 
 		form.reset();
 		renderCustomerConsignments(currentUser.id);
+		renderCustomerNotifications(currentUser.id);
 	});
+}
+
+function renderCustomerNotifications(userId) {
+	const notificationsList = document.getElementById('notificationsList');
+	if (!notificationsList) return;
+
+	const allNotifications = getNotifications();
+	const userNotifications = allNotifications
+		.filter(n => n.userId === userId)
+		.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+	if (userNotifications.length === 0) {
+		notificationsList.innerHTML = '<p class="muted-text">No new notifications.</p>';
+		return;
+	}
+
+	notificationsList.innerHTML = userNotifications.map(n => `
+		<div class="notification-item ${n.read ? 'read' : 'unread'}">
+			<div class="notification-header">
+				<strong>${n.title}</strong>
+				<span class="notification-time">${new Date(n.timestamp).toLocaleString()}</span>
+			</div>
+			<div class="notification-body">${n.message}</div>
+		</div>
+	`).join('');
+
+	// Automatically mark all as read after display for simplicity
+	const updatedNotifications = allNotifications.map(n => {
+		if (n.userId === userId) {
+			return { ...n, read: true };
+		}
+		return n;
+	});
+	saveNotifications(updatedNotifications);
 }
 
 function renderCustomerConsignments(userId) {
@@ -1983,7 +2182,7 @@ function renderCustomerConsignments(userId) {
 	tbody.innerHTML = '';
 
 	if (consignments.length === 0) {
-		tbody.innerHTML = '<tr><td colspan="5">You have no consignments yet.</td></tr>';
+		tbody.innerHTML = '<tr><td colspan="6">You have no consignments yet.</td></tr>';
 		return;
 	}
 
@@ -1991,6 +2190,7 @@ function renderCustomerConsignments(userId) {
 		const row = document.createElement('tr');
 		row.innerHTML = `
 			<td>${c.id}</td>
+			<td>${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '-'}</td>
 			<td>${c.receiverName}</td>
 			<td>${c.destination}</td>
 			<td>${c.volume.toFixed(2)} m³</td>
@@ -2020,7 +2220,7 @@ function formatCurrency(amount) {
 
 // Validate email format.
 function isValidEmail(email) {
-	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
+	return /^[a-zA-Z0-0._%+-]+@[a-zA-Z0-0.-]+\.[a-zA-Z]{2,}$/.test(String(email || '').trim().toLowerCase());
 }
 
 // Validate full name.
